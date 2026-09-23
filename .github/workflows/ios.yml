@@ -13,6 +13,9 @@ on:
   push:
     tags: ['v*']
 
+permissions:
+  contents: write
+
 jobs:
   ipa:
     name: Zbuduj IPA
@@ -76,3 +79,18 @@ jobs:
           name: btc-sygnaly-ipa
           path: dist-ipa/btc-sygnaly.ipa
           retention-days: 90
+
+      # Artefakt wymaga zalogowania na GitHubie, więc dokładamy plik do
+      # najnowszego wydania — stamtąd link jest publiczny.
+      - name: Dołącz IPA do najnowszego wydania
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="$(gh release view --json tagName --jq .tagName 2>/dev/null || true)"
+          if [ -z "$TAG" ]; then
+            echo "Brak wydania, do którego można dołączyć IPA — pomijam."
+            exit 0
+          fi
+          gh release upload "$TAG" dist-ipa/btc-sygnaly.ipa --clobber
+          echo "IPA dołączone do wydania $TAG"

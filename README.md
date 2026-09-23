@@ -8,6 +8,17 @@ Android i iPhone, cały interfejs po polsku.
 > utraty całego kapitału. Sygnały to wynik analizy technicznej i danych publicznych —
 > nie przewidują przyszłości, a skuteczność historyczna niczego nie gwarantuje.
 
+## Pobierz
+
+| Urządzenie | Link | Co zrobić |
+| ---------- | ---- | --------- |
+| **Android** | [**btc-sygnaly.apk**](https://github.com/diketes/btc-sygnaly/releases/latest/download/btc-sygnaly.apk) | Otwórz plik na telefonie i zainstaluj. Android poprosi o zgodę na instalację z nieznanych źródeł. |
+| **iPhone** | [**diketes.github.io/btc-sygnaly**](https://diketes.github.io/btc-sygnaly/) | Otwórz w **Safari**, potem *Udostępnij → Dodaj do ekranu początkowego*. |
+| Przeglądarka | [diketes.github.io/btc-sygnaly](https://diketes.github.io/btc-sygnaly/) | Działa też po prostu w oknie przeglądarki. |
+
+Wszystkie [wydania](https://github.com/diketes/btc-sygnaly/releases) · aktualizacje APK
+budują się automatycznie po każdej zmianie w kodzie.
+
 ---
 
 ## Dwa horyzonty, do wyboru
@@ -75,8 +86,13 @@ Backtest przyjmuje argumenty: `npm run backtest -- dlugi 4` (horyzont i liczba l
 
 ### Android
 
-Lokalnie — potrzebny **JDK 17+** i **Android SDK** (najprościej: zainstaluj Android
-Studio i uruchom je raz):
+Najprościej: pobierz gotowy plik —
+[**btc-sygnaly.apk**](https://github.com/diketes/btc-sygnaly/releases/latest/download/btc-sygnaly.apk).
+Buduje się automatycznie przy każdej zmianie w kodzie
+(workflow `.github/workflows/android.yml`) i ląduje w [wydaniach](https://github.com/diketes/btc-sygnaly/releases).
+
+Budowanie u siebie wymaga **JDK 17+** i **Android SDK** (najprościej: zainstaluj
+Android Studio i uruchom je raz):
 
 ```bash
 npm run apk
@@ -87,25 +103,23 @@ adb install -r dist-apk/btc-sygnaly-debug.apk
 `npm run apk` najpierw sprawdza, czego brakuje, i mówi to po polsku, zamiast sypać
 błędami Gradle.
 
-Bez instalowania czegokolwiek: wypchnij repozytorium na GitHub — workflow
-`.github/workflows/android.yml` zbuduje APK w chmurze i wystawi go jako artefakt.
-
 ### iPhone
 
-**Sposób pierwszy (polecany) — PWA.** Nie wymaga Maca, konta Apple ani odświeżania
-co tydzień.
+**Sposób pierwszy (polecany) — PWA.** Nie wymaga Maca, konta Apple, kabla ani
+odświeżania co tydzień.
 
-1. Włącz GitHub Pages w ustawieniach repozytorium (źródło: GitHub Actions).
-2. Workflow `.github/workflows/pwa.yml` opublikuje aplikację po wypchnięciu zmian.
-3. Otwórz adres w **Safari** (nie w Chrome), naciśnij **Udostępnij → Dodaj do ekranu
-   początkowego**.
+1. Otwórz [diketes.github.io/btc-sygnaly](https://diketes.github.io/btc-sygnaly/)
+   w **Safari** (musi być Safari — Chrome na iOS nie potrafi dodać aplikacji do ekranu).
+2. Naciśnij **Udostępnij** (kwadrat ze strzałką) → **Dodaj do ekranu początkowego**.
 
-Aplikacja działa wtedy pełnoekranowo, z własną ikoną i trybem offline.
+Aplikacja działa wtedy pełnoekranowo, z własną ikoną i trybem offline — wygląda
+i zachowuje się jak zwykła aplikacja.
 
 **Sposób drugi — niepodpisany IPA.** Workflow `.github/workflows/ios.yml`
 (uruchamiany ręcznie albo tagiem `v*`) buduje `.ipa` na maszynie macOS GitHuba.
 Plik wgrywasz przez AltStore lub Sideloadly. Uwaga: przy darmowym certyfikacie
-Apple aplikacja wygasa po 7 dniach i trzeba ją odświeżyć.
+Apple aplikacja wygasa po 7 dniach i trzeba ją odświeżyć — dlatego PWA jest
+wygodniejsza dla większości osób.
 
 ## Skąd biorą się dane
 
