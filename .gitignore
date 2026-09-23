@@ -1,0 +1,36 @@
+# Zależności
+node_modules/
+
+# Wyniki budowania
+dist/
+dist-apk/
+dist-ipa/
+*.local
+
+# Platformy natywne – generowane przez Capacitor
+android/
+ios/
+
+# Wyniki testów i diagnostyki
+zrzuty/
+backtest-*.csv
+
+# Środowisko
+.env
+.env.*
+!.env.example
+
+# Edytory
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+
+# System
+.DS_Store
+Thumbs.db
+
+# Logi
+npm-debug.log*
+yarn-error.log*
+*.log

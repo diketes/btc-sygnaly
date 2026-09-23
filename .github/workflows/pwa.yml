@@ -1,0 +1,64 @@
+name: PWA na GitHub Pages
+
+# Publikuje wersję przeglądarkową. To najprostsza droga na iPhone'a:
+# otwierasz adres w Safari → Udostępnij → Dodaj do ekranu początkowego.
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  buduj:
+    name: Zbuduj PWA
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pobierz kod
+        uses: actions/checkout@v4
+
+      - name: Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Zainstaluj zależności
+        run: npm ci
+
+      - name: Testy jednostkowe
+        run: npm test
+
+      - name: Wygeneruj ikony
+        run: node scripts/generuj-ikony.mjs
+
+      - name: Zbuduj
+        # Strona leży pod adresem /<nazwa-repo>/, więc bazę trzeba ustawić.
+        env:
+          BASE_PUBLICZNA: /${{ github.event.repository.name }}/
+        run: npm run build
+
+      - name: Przygotuj artefakt Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  publikuj:
+    name: Opublikuj
+    needs: buduj
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.wdrozenie.outputs.page_url }}
+    steps:
+      - name: Wdróż na GitHub Pages
+        id: wdrozenie
+        uses: actions/deploy-pages@v4

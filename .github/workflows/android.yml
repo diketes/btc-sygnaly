@@ -1,0 +1,133 @@
+name: APK na Androida
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+# Potrzebne, żeby workflow mógł utworzyć wydanie z plikiem APK.
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    name: Zbuduj APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Pobierz kod
+        uses: actions/checkout@v4
+
+      - name: Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Zainstaluj zależności
+        run: npm ci
+
+      - name: Testy jednostkowe
+        run: npm test
+
+      - name: Test deduplikacji newsów
+        run: npm run test:dedup
+
+      # Ikony MUSZĄ powstać przed budowaniem – Vite kopiuje public/ do dist/
+      # dopiero w trakcie budowania.
+      - name: Wygeneruj ikony
+        run: node scripts/generuj-ikony.mjs
+
+      - name: Zbuduj wersję webową
+        run: npm run build
+
+      - name: Dodaj platformę Android
+        run: npx cap add android || echo "Platforma już istnieje"
+
+      - name: Zsynchronizuj Capacitor
+        run: npx cap sync android
+
+      - name: Nałóż dostosowania (motyw, kolory)
+        run: node scripts/dostosuj-android.mjs
+
+      - name: Ikony Androida
+        # Drugi przebieg – katalog android/ powstał dopiero teraz.
+        run: node scripts/generuj-ikony.mjs
+
+      - name: Gradle – assembleDebug
+        working-directory: android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Przygotuj plik do wydania
+        run: |
+          mkdir -p dist-apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk dist-apk/btc-sygnaly.apk
+          ls -lh dist-apk/
+
+      - name: Wystaw APK jako artefakt
+        uses: actions/upload-artifact@v4
+        with:
+          name: btc-sygnaly-apk
+          path: dist-apk/btc-sygnaly.apk
+          retention-days: 90
+
+      # Wydanie daje publiczny, bezpośredni link do pobrania — w odróżnieniu
+      # od artefaktu, który wymaga zalogowania na GitHubie.
+      - name: Opublikuj wydanie
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="v1.0.${{ github.run_number }}"
+
+          # Treść wydania piszemy do pliku — wielolinijkowy --notes wprost
+          # w poleceniu wciągnąłby wcięcia z YAML-a i zepsuł formatowanie.
+          cat > notatki.md <<'KONIEC'
+          Aplikacja do analizy Bitcoina: sygnały long/short w dwóch horyzontach
+          (krótki i długi), wykresy na żywo, newsy z deduplikacją. Wszystko po polsku.
+
+          ## Android
+
+          Pobierz **btc-sygnaly.apk** z listy poniżej i otwórz plik na telefonie.
+          Przy pierwszej instalacji Android poprosi o zgodę na instalowanie
+          z nieznanych źródeł — trzeba ją wydać dla przeglądarki lub menedżera plików.
+
+          ## iPhone
+
+          Otwórz stronę aplikacji w **Safari** i wybierz
+          *Udostępnij → Dodaj do ekranu początkowego*.
+          Aplikacja zadziała wtedy pełnoekranowo, z własną ikoną i trybem offline.
+
+          ---
+
+          To nie jest porada inwestycyjna. Handel BTC z dźwignią wiąże się
+          z ryzykiem utraty całego kapitału.
+          KONIEC
+
+          # Ponowne uruchomienie tego samego przebiegu dałoby ten sam tag,
+          # a wtedy "release create" kończy się błędem — sprzątamy najpierw.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Wydanie $TAG już istnieje — usuwam i tworzę na nowo."
+            gh release delete "$TAG" --yes --cleanup-tag
+          fi
+
+          gh release create "$TAG" \
+            dist-apk/btc-sygnaly.apk \
+            --title "BTC Sygnały $TAG" \
+            --notes-file notatki.md \
+            --latest
+
+          echo "Wydanie opublikowane: $TAG"
+          echo "Link: https://github.com/${{ github.repository }}/releases/latest/download/btc-sygnaly.apk"

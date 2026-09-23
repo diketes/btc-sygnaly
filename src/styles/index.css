@@ -1,0 +1,195 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --tlo-0: #000000;
+  --tlo-1: #0a0b0f;
+  --tlo-2: #12141c;
+  --tlo-3: #1b1e2a;
+  --zielen: #00e28a;
+  --czerwien: #ff3b5c;
+  --fiolet: #7c5cff;
+  --zloto: #f7931a;
+  --tekst: #f2f4f8;
+  --tekst-2: #9aa3b5;
+  --tekst-3: #5e667a;
+  --obwodka: rgba(255, 255, 255, 0.08);
+  --gora-bezpieczna: env(safe-area-inset-top, 0px);
+  --dol-bezpieczny: env(safe-area-inset-bottom, 0px);
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--tlo-0);
+  color: var(--tekst);
+  font-family: Inter, system-ui, -apple-system, sans-serif;
+  overscroll-behavior-y: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Wyłączamy zaznaczanie poza polami tekstowymi – aplikacja ma być jak natywna. */
+body {
+  user-select: none;
+  -webkit-user-select: none;
+}
+input,
+textarea {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+@layer components {
+  .szklo {
+    background: linear-gradient(
+      160deg,
+      rgba(255, 255, 255, 0.055) 0%,
+      rgba(255, 255, 255, 0.018) 100%
+    );
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    border: 1px solid var(--obwodka);
+  }
+
+  .karta {
+    @apply szklo rounded-3xl;
+    box-shadow: 0 8px 32px -14px rgba(0, 0, 0, 0.95);
+  }
+
+  .cyfry {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+
+  .naglowek {
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    letter-spacing: -0.015em;
+  }
+
+  .etykieta {
+    @apply text-[11px] uppercase tracking-[0.14em];
+    color: var(--tekst-3);
+  }
+}
+
+/* Bezpieczne marginesy pod notcha i pasek nawigacji. */
+.bezpieczna-gora {
+  padding-top: calc(var(--gora-bezpieczna) + 8px);
+}
+.bezpieczny-dol {
+  padding-bottom: calc(var(--dol-bezpieczny) + 8px);
+}
+
+/* Płynne przewijanie z odbiciem jak w aplikacjach natywnych. */
+.przewijanie {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+
+/* Rolka cyfr w animowanej cenie. */
+.rolka {
+  display: inline-block;
+  overflow: hidden;
+  height: 1em;
+  line-height: 1em;
+  vertical-align: bottom;
+}
+.rolka-tasma {
+  display: flex;
+  flex-direction: column;
+  will-change: transform;
+}
+
+/* Delikatny puls dla elementów wymagających uwagi. */
+@keyframes oddech {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.72;
+    transform: scale(1.03);
+  }
+}
+.oddech {
+  animation: oddech 2.2s ease-in-out infinite;
+}
+
+@keyframes blysk-zielony {
+  0% {
+    background-color: rgba(0, 226, 138, 0.22);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+@keyframes blysk-czerwony {
+  0% {
+    background-color: rgba(255, 59, 92, 0.22);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+.blysk-w-gore {
+  animation: blysk-zielony 0.5s ease-out;
+}
+.blysk-w-dol {
+  animation: blysk-czerwony 0.5s ease-out;
+}
+
+@keyframes wstrzas {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-7px);
+  }
+  40% {
+    transform: translateX(6px);
+  }
+  60% {
+    transform: translateX(-4px);
+  }
+  80% {
+    transform: translateX(2px);
+  }
+}
+.wstrzas {
+  animation: wstrzas 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+
+/* Gdy użytkownik prosi o mniej ruchu – wyłączamy wszystko ozdobne. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* Wykres lightweight-charts – dopasowanie do motywu. */
+.tv-lightweight-charts {
+  font-family: 'JetBrains Mono', monospace !important;
+}

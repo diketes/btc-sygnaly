@@ -1,0 +1,78 @@
+name: IPA na iPhone (niepodpisany)
+
+# Buduje niepodpisany plik .ipa do wgrania przez AltStore albo Sideloadly.
+# Nie wymaga konta deweloperskiego Apple ani Maca po stronie użytkownika –
+# kompilacja leci na maszynie macOS udostępnianej przez GitHub Actions.
+#
+# Uwaga: aplikacja wgrana w ten sposób traci ważność po 7 dniach (darmowy
+# certyfikat Apple) i trzeba ją odświeżyć w AltStore. Wygodniejsza dla
+# większości osób jest wersja PWA – patrz workflow „pwa.yml”.
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+jobs:
+  ipa:
+    name: Zbuduj IPA
+    runs-on: macos-latest
+
+    steps:
+      - name: Pobierz kod
+        uses: actions/checkout@v4
+
+      - name: Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Zainstaluj zależności
+        run: npm ci
+
+      - name: Zbuduj wersję webową
+        run: npm run build
+
+      - name: Wygeneruj ikony
+        run: node scripts/generuj-ikony.mjs
+
+      - name: Dodaj platformę iOS
+        run: |
+          npm install @capacitor/ios@^6.2.0
+          npx cap add ios || echo "Platforma już istnieje"
+          npx cap sync ios
+
+      - name: Zainstaluj CocoaPods
+        working-directory: ios/App
+        run: pod install
+
+      - name: Kompilacja bez podpisu
+        working-directory: ios/App
+        run: |
+          xcodebuild \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            ONLY_ACTIVE_ARCH=NO
+
+      - name: Spakuj do .ipa
+        working-directory: ios/App
+        run: |
+          mkdir -p Payload
+          cp -r build/Build/Products/Release-iphoneos/App.app Payload/
+          zip -qry btc-sygnaly.ipa Payload
+          mkdir -p "$GITHUB_WORKSPACE/dist-ipa"
+          mv btc-sygnaly.ipa "$GITHUB_WORKSPACE/dist-ipa/"
+
+      - name: Wystaw IPA jako artefakt
+        uses: actions/upload-artifact@v4
+        with:
+          name: btc-sygnaly-ipa
+          path: dist-ipa/btc-sygnaly.ipa
+          retention-days: 90

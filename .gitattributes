@@ -1,0 +1,21 @@
+# Projekt powstał na Windowsie, ale CI działa na Linuksie i macOS.
+# Znaki końca linii CRLF psują skrypty powłoki (np. terminator heredoca
+# „KONIEC\r” nie pasuje do „KONIEC”), więc wymuszamy LF wszędzie tam,
+# gdzie ma to znaczenie.
+
+* text=auto eol=lf
+
+# Pliki wykonywane przez powłokę — LF obowiązkowo.
+*.sh        text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+gradlew     text eol=lf
+
+# Pliki binarne – bez konwersji.
+*.png       binary
+*.jpg       binary
+*.ico       binary
+*.apk       binary
+*.ipa       binary
+*.keystore  binary
+*.jks       binary
