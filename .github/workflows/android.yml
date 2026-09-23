@@ -30,8 +30,42 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Android SDK
-        uses: android-actions/setup-android@v3
+      # Akcja android-actions/setup-android instaluje pakiet „tools”, którego
+      # Google już nie wystawia — kończy się to błędem „Failed to find package
+      # 'tools'”. Obraz ubuntu-latest ma SDK preinstalowane, więc wystarczy
+      # wskazać jego katalog i upewnić się, że jest platforma wymagana przez
+      # Capacitora (compileSdk 34).
+      - name: Przygotuj Android SDK
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          if [ ! -d "$SDK" ]; then
+            echo "Nie znaleziono Android SDK w $SDK"
+            exit 1
+          fi
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+
+          echo "--- zainstalowane platformy ---"
+          ls "$SDK/platforms" 2>/dev/null || echo "(brak)"
+          echo "--- build-tools ---"
+          ls "$SDK/build-tools" 2>/dev/null || echo "(brak)"
+
+          SDKMANAGER="$(find "$SDK/cmdline-tools" -type f -name sdkmanager 2>/dev/null | sort | tail -1)"
+          if [ -z "$SDKMANAGER" ]; then
+            echo "Nie znaleziono sdkmanager — polegam na tym, co jest w obrazie."
+            exit 0
+          fi
+          echo "sdkmanager: $SDKMANAGER"
+
+          # Licencje trzeba zaakceptować, inaczej Gradle odmówi pobrania braków.
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+
+          # Dociągamy tylko to, czego brakuje — zwykle nic.
+          if [ ! -d "$SDK/platforms/android-34" ]; then
+            echo "Instaluję platformy;android-34"
+            "$SDKMANAGER" "platforms;android-34" "build-tools;34.0.0" || true
+          fi
 
       - name: Zainstaluj zależności
         run: npm ci
