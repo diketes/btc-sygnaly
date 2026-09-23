@@ -25,7 +25,13 @@ import { podsumujLikwidacje, uzyjRynku } from '@/stan/rynek'
 import { ryzykoDlaSilnika, uzyjNewsow } from '@/stan/newsy'
 import { uzyjSygnalow } from '@/stan/sygnaly'
 import { uzyjUstawien } from '@/stan/ustawienia'
+import {
+  nasluchujAktualizacjiPwa,
+  sprawdzAktualizacje,
+  type Aktualizacja,
+} from '@/dane/aktualizacje'
 import { Czasteczki, type UchwytCzasteczek } from '@/ui/Czasteczki'
+import { PasekAktualizacji } from '@/ui/PasekAktualizacji'
 import { PasekNawigacji, type Zakladka } from '@/ui/Powloka'
 import { TloPlynne } from '@/ui/TloPlynne'
 import { Newsy } from '@/ekrany/Newsy'
@@ -117,9 +123,15 @@ export function App() {
   const haptyka = uzyjUstawien((s) => s.haptyka)
   const ustaw = uzyjUstawien((s) => s.ustaw)
 
+  const pominietaWersja = uzyjUstawien((s) => s.pominietaWersja)
+  const sprawdzajAktualizacje = uzyjUstawien((s) => s.sprawdzajAktualizacje)
+
   const [zakladka, ustawZakladke] = useState<Zakladka>('pulpit')
   const [ustawieniaOtwarte, ustawUstawieniaOtwarte] = useState(false)
   const [gotowe, ustawGotowe] = useState(false)
+  const [aktualizacja, ustawAktualizacje] = useState<Aktualizacja | null>(null)
+  const [pwaGotowa, ustawPwaGotowa] = useState(false)
+  const zastosujPwa = useRef<() => void>(() => window.location.reload())
 
   const czasteczki = useRef<UchwytCzasteczek>(null)
   const ostatniaAnaliza = useRef(0)
@@ -240,6 +252,27 @@ export function App() {
     return () => clearTimeout(t)
   }, [swiezySygnal, wyczyscSwiezy])
 
+  // --- aktualizacje --------------------------------------------------------
+  useEffect(() => {
+    if (!gotowe || !zaakceptowano || !sprawdzajAktualizacje) return
+
+    // Wersja natywna: pytamy GitHuba o najnowsze wydanie.
+    const sprawdz = () => {
+      void sprawdzAktualizacje()
+        .then((a) => ustawAktualizacje(a))
+        .catch(() => {
+          // Brak sieci albo limit zapytań GitHuba – cicho, spróbujemy później.
+        })
+    }
+    sprawdz()
+    const timer = setInterval(sprawdz, 6 * 3_600_000)
+
+    // Wersja przeglądarkowa / iPhone: nową wersję przynosi service worker.
+    zastosujPwa.current = nasluchujAktualizacjiPwa(() => ustawPwaGotowa(true))
+
+    return () => clearInterval(timer)
+  }, [gotowe, zaakceptowano, sprawdzajAktualizacje])
+
   // --- powrót aplikacji z tła ---------------------------------------------
   useEffect(() => {
     if (!zaakceptowano) return
@@ -289,11 +322,30 @@ export function App() {
     )
   }
 
+  // Pasek chowamy dla wersji, którą użytkownik już raz odrzucił.
+  const aktualizacjaDoPokazania =
+    aktualizacja && aktualizacja.wersja !== pominietaWersja ? aktualizacja : null
+
   return (
     <>
       <TloReagujace aktywne={efektyWlaczone} />
       <Czasteczki ref={czasteczki} aktywne={efektyWlaczone} />
       <PilnowanieCeny />
+
+      <PasekAktualizacji
+        doPobrania={aktualizacjaDoPokazania}
+        gotowaDoOdswiezenia={pwaGotowa}
+        naPobierz={(a) => {
+          // Otwarcie w przeglądarce systemowej – Android sam zaproponuje
+          // instalację po pobraniu pliku.
+          window.open(a.linkApk, '_blank')
+        }}
+        naOdswiez={() => zastosujPwa.current()}
+        naOdrzuc={() => {
+          if (aktualizacjaDoPokazania) ustaw('pominietaWersja', aktualizacjaDoPokazania.wersja)
+          ustawPwaGotowa(false)
+        }}
+      />
 
       {/*
         Ekrany podmieniane są bez `AnimatePresence`: zakładka ma zniknąć od razu,

@@ -7,7 +7,10 @@
  * danych jest baza lokalna, która wie, kiedy je zapisano.
  */
 
-const WERSJA = 'btc-sygnaly-v1'
+// Podmieniane przy budowaniu na faktyczną wersję (patrz vite.config.ts).
+// Zmiana nazwy pamięci podręcznej wymusza sprzątnięcie poprzedniej przy
+// aktywacji nowego service workera.
+const WERSJA = 'btc-sygnaly-__WERSJA_SW__'
 const POWLOKA = [
   './',
   './index.html',
@@ -17,13 +20,22 @@ const POWLOKA = [
 ]
 
 self.addEventListener('install', (zdarzenie) => {
+  // Bez skipWaiting() – nowa wersja czeka, aż aplikacja sama o to poprosi.
+  // Dzięki temu użytkownik nie traci stanu ekranu w trakcie korzystania,
+  // tylko dostaje pasek „Nowa wersja gotowa” i decyduje, kiedy przeładować.
   zdarzenie.waitUntil(
     caches
       .open(WERSJA)
       .then((magazyn) => magazyn.addAll(POWLOKA))
-      .then(() => self.skipWaiting())
-      .catch(() => self.skipWaiting()),
+      .catch(() => undefined),
   )
+})
+
+// Aplikacja prosi o natychmiastowe przejęcie kontroli (przycisk „Odśwież”).
+self.addEventListener('message', (zdarzenie) => {
+  if (zdarzenie.data && zdarzenie.data.typ === 'PRZEJMIJ') {
+    void self.skipWaiting()
+  }
 })
 
 self.addEventListener('activate', (zdarzenie) => {

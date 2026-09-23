@@ -103,13 +103,18 @@ textarea {
   overscroll-behavior-y: contain;
 }
 
-/* Rolka cyfr w animowanej cenie. */
+/* Rolka cyfr w animowanej cenie.
+   Wymiary w jednostkach czcionki (em/ch), nigdy w pikselach – inaczej
+   systemowe powiększenie czcionki na Androidzie rozjeżdża cyfry. */
 .rolka {
   display: inline-block;
   overflow: hidden;
-  height: 1em;
-  line-height: 1em;
+  height: 1.15em;
+  line-height: 1.15em;
   vertical-align: bottom;
+  /* Odstęp między znakami ustawiamy na samym kontenerze ceny, nie tutaj –
+     inaczej cyfra nie trafiałaby w środek swojego miejsca. */
+  letter-spacing: 0;
 }
 .rolka-tasma {
   display: flex;

@@ -1,5 +1,6 @@
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
+import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 // Baza dla GitHub Pages ustawiana zmienną BASE_PUBLICZNA (np. "/btc-sygnaly/").
@@ -44,9 +45,41 @@ function proxyDeweloperskie(): Plugin {
   }
 }
 
+/**
+ * Wersja aplikacji wstrzykiwana przy budowaniu.
+ *
+ * Build Androida ustawia ją na dokładnie ten sam znacznik, pod którym powstaje
+ * wydanie na GitHubie (np. „v1.0.7”) — dzięki temu aplikacja potrafi porównać
+ * siebie z najnowszym wydaniem i zaproponować aktualizację.
+ */
+const wersja = process.env.WERSJA_APLIKACJI ?? 'dev'
+
+/**
+ * Wpisuje wersję do service workera.
+ *
+ * Pliki z `public/` kopiowane są dosłownie, więc Vite ich nie przetwarza —
+ * podmieniamy znacznik po zbudowaniu. Bez tego nazwa pamięci podręcznej nigdy
+ * by się nie zmieniła i przeglądarka trzymałaby starą powłokę aplikacji.
+ */
+function wersjaWServiceWorkerze(): Plugin {
+  return {
+    name: 'btc-wersja-sw',
+    apply: 'build',
+    closeBundle() {
+      const plik = resolve(__dirname, 'dist', 'sw.js')
+      if (!existsSync(plik)) return
+      const tresc = readFileSync(plik, 'utf8').replace(/__WERSJA_SW__/g, wersja)
+      writeFileSync(plik, tresc)
+    },
+  }
+}
+
 export default defineConfig({
   base: baza,
-  plugins: [react(), proxyDeweloperskie()],
+  define: {
+    __WERSJA__: JSON.stringify(wersja),
+  },
+  plugins: [react(), proxyDeweloperskie(), wersjaWServiceWorkerze()],
   resolve: {
     alias: { '@': resolve(__dirname, 'src') },
   },

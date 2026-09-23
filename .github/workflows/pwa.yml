@@ -42,8 +42,11 @@ jobs:
 
       - name: Zbuduj
         # Strona leży pod adresem /<nazwa-repo>/, więc bazę trzeba ustawić.
+        # Wersja „web-…” celowo nie wygląda jak znacznik wydania — ta wersja
+        # aktualizuje się przez service workera, nie przez pobieranie APK.
         env:
           BASE_PUBLICZNA: /${{ github.event.repository.name }}/
+          WERSJA_APLIKACJI: web-${{ github.run_number }}
         run: npm run build
 
       - name: Przygotuj artefakt Pages

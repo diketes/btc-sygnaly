@@ -20,7 +20,8 @@
     "cap:sync": "npm run build && npx cap sync",
     "android:add": "npx cap add android",
     "apk": "node scripts/buduj-apk.mjs",
-    "pwa": "npm run build"
+    "pwa": "npm run build",
+    "test:czcionka": "node scripts/test-skalowanie-czcionki.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^6.2.0",
@@ -57,4 +58,3 @@
     "ws": "^8.21.3"
   }
 }
-

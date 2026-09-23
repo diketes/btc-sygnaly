@@ -84,4 +84,30 @@ if (existsSync(strings)) {
   }
 }
 
+/**
+ * Wersja widoczna w ustawieniach Androida.
+ *
+ * Szablon Capacitora wpisuje na sztywno versionName "1.0", więc każda kolejna
+ * instalacja wyglądałaby na tę samą wersję. Podmieniamy ją na znacznik wydania,
+ * a versionCode na numer budowania — inaczej Android potrafi odmówić instalacji
+ * nowszego pliku, uznając go za tę samą wersję.
+ */
+const buildGradle = join(KORZEN, 'android', 'app', 'build.gradle')
+const wersja = (process.env.WERSJA_APLIKACJI ?? '').replace(/^v/, '')
+const numerBudowania = Number(process.env.NUMER_BUDOWANIA ?? '')
+
+if (existsSync(buildGradle) && wersja && Number.isFinite(numerBudowania) && numerBudowania > 0) {
+  let tresc = readFileSync(buildGradle, 'utf8')
+  const przed = tresc
+  tresc = tresc
+    .replace(/versionCode\s+\d+/, `versionCode ${numerBudowania}`)
+    .replace(/versionName\s+"[^"]*"/, `versionName "${wersja}"`)
+  if (tresc !== przed) {
+    writeFileSync(buildGradle, tresc, 'utf8')
+    console.log(`zapisano wersję w build.gradle: ${wersja} (kod ${numerBudowania})`)
+  }
+} else if (existsSync(buildGradle)) {
+  console.log('Brak WERSJA_APLIKACJI / NUMER_BUDOWANIA – zostawiam wersję z szablonu.')
+}
+
 console.log('\nDostosowania Androida nałożone.')

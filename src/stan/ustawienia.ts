@@ -27,6 +27,9 @@ export interface Ustawienia {
   ryzykoProc: number
   zaakceptowanoRyzyko: boolean
   wskaznikiWykresu: string[]
+  /** Wersja, o której użytkownik nie chce już słyszeć (zamknął pasek). */
+  pominietaWersja: string
+  sprawdzajAktualizacje: boolean
 }
 
 export const DOMYSLNE: Ustawienia = {
@@ -47,6 +50,8 @@ export const DOMYSLNE: Ustawienia = {
   ryzykoProc: 1,
   zaakceptowanoRyzyko: false,
   wskaznikiWykresu: ['ema21', 'ema50', 'ema200', 'poziomy'],
+  pominietaWersja: '',
+  sprawdzajAktualizacje: true,
 }
 
 interface StanUstawien extends Ustawienia {

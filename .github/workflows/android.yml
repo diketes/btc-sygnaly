@@ -82,6 +82,10 @@ jobs:
         run: node scripts/generuj-ikony.mjs
 
       - name: Zbuduj wersję webową
+        # Ta sama wartość co znacznik wydania niżej — aplikacja porównuje ją
+        # z najnowszym wydaniem na GitHubie, żeby wykryć aktualizację.
+        env:
+          WERSJA_APLIKACJI: v1.0.${{ github.run_number }}
         run: npm run build
 
       - name: Dodaj platformę Android
@@ -90,7 +94,10 @@ jobs:
       - name: Zsynchronizuj Capacitor
         run: npx cap sync android
 
-      - name: Nałóż dostosowania (motyw, kolory)
+      - name: Nałóż dostosowania (motyw, kolory, wersja)
+        env:
+          WERSJA_APLIKACJI: v1.0.${{ github.run_number }}
+          NUMER_BUDOWANIA: ${{ github.run_number }}
         run: node scripts/dostosuj-android.mjs
 
       - name: Ikony Androida

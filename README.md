@@ -78,6 +78,7 @@ Wymagania: Node 20 lub nowszy.
 | `npm run backtest`         | backtest silnika na realnych danych z Binance                |
 | `npm run sprawdz`          | wszystkie kontrole naraz                                     |
 | `npm run sprawdz:app`      | klika przez aplikację w przeglądarce i robi zrzuty           |
+| `npm run test:czcionka`    | sprawdza aplikację przy powiększonej czcionce systemowej     |
 | `npm run apk`              | buduje APK (wymaga JDK 17+ i Android SDK)                    |
 
 Backtest przyjmuje argumenty: `npm run backtest -- dlugi 4` (horyzont i liczba lat).
@@ -254,6 +255,26 @@ Motion), nie na krzywych czasowych:
 Wszystko szanuje systemowe `prefers-reduced-motion` oraz przełącznik **„Oszczędzaj
 baterię”**, który wyłącza canvas i żyroskop. Animowane są wyłącznie `transform`
 i `opacity`, a pętle canvasa zasypiają, gdy aplikacja schodzi w tło.
+
+## Aktualizacje
+
+Aplikacja nie jest w Google Play, więc sama pilnuje wersji.
+
+**Android (APK):** przy starcie i co 6 godzin pyta GitHuba o najnowsze wydanie
+i porównuje je z wersją wbudowaną przy budowaniu. Gdy jest nowsza, u góry
+pojawia się pasek z numerem wersji i przyciskiem *Pobierz* — otwiera przeglądarkę
+z plikiem APK, a Android sam proponuje instalację. Pasek można zamknąć; wtedy
+ta konkretna wersja już nie wraca. Wszystko jest też w *Ustawieniach →
+Aktualizacje*: zainstalowana wersja, ręczne sprawdzenie i przełącznik
+automatycznego sprawdzania.
+
+`versionCode` i `versionName` w pliku APK ustawiane są na numer wydania —
+bez tego Android uznawałby każdą nową wersję za tę samą i odmawiał instalacji.
+
+**iPhone i przeglądarka:** aktualizuje się samo. Service worker pobiera nową
+wersję w tle, a pasek mówi tylko *Nowa wersja gotowa — odśwież*. Nic nie trzeba
+instalować. Nowa wersja nie przejmuje sterowania w trakcie korzystania z aplikacji,
+żeby nie zgubić stanu ekranu w połowie analizy.
 
 ## Dane lokalne
 

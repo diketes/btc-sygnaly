@@ -1,6 +1,12 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { PROFILE } from '@/analiza/profile'
+import {
+  sprawdzNaZadanie,
+  STRONA_WYDAN,
+  WERSJA,
+  type WynikSprawdzenia,
+} from '@/dane/aktualizacje'
 import { wyczyscWszystko } from '@/dane/db'
 import { ZRODLA } from '@/dane/newsy/zrodla'
 import { GIELDY, stanZrodla, ustawGielde } from '@/dane/gieldy'
@@ -199,6 +205,10 @@ export function Ustawienia({ naZamknij }: { naZamknij: () => void }) {
           </div>
         </Sekcja>
 
+        <Sekcja tytul="Aktualizacje">
+          <SekcjaAktualizacji />
+        </Sekcja>
+
         <Sekcja tytul="Dane">
           <div className="karta space-y-2 p-4">
             {potwierdzenie === null ? (
@@ -273,6 +283,101 @@ export function Ustawienia({ naZamknij }: { naZamknij: () => void }) {
         </div>
       </div>
     </Ekran>
+  )
+}
+
+function SekcjaAktualizacji() {
+  const sprawdzaj = uzyjUstawien((s) => s.sprawdzajAktualizacje)
+  const ustaw = uzyjUstawien((s) => s.ustaw)
+  const [stan, ustawStan] = useState<WynikSprawdzenia | null>(null)
+  const [wToku, ustawWToku] = useState(false)
+
+  const sprawdz = async () => {
+    ustawWToku(true)
+    try {
+      ustawStan(await sprawdzNaZadanie())
+    } finally {
+      ustawWToku(false)
+    }
+  }
+
+  return (
+    <div className="karta p-4">
+      <div className="mb-3 flex items-baseline justify-between">
+        <span className="text-[13px] font-medium">Zainstalowana wersja</span>
+        <span className="cyfry text-[13px] font-semibold" style={{ color: 'var(--zloto)' }}>
+          {WERSJA}
+        </span>
+      </div>
+
+      <button
+        onClick={sprawdz}
+        disabled={wToku}
+        className="mb-2 w-full rounded-xl bg-white/6 py-2.5 text-[13px] font-semibold disabled:opacity-50"
+      >
+        {wToku ? 'Sprawdzam…' : 'Sprawdź aktualizacje'}
+      </button>
+
+      {stan && (
+        <div
+          className="mb-3 rounded-xl p-2.5"
+          style={{
+            background:
+              stan.stan === 'dostepna'
+                ? 'rgba(0,226,138,0.1)'
+                : stan.stan === 'blad'
+                  ? 'rgba(255,59,92,0.1)'
+                  : 'rgba(255,255,255,0.05)',
+          }}
+        >
+          <p
+            className="text-[12px] leading-relaxed"
+            style={{
+              color:
+                stan.stan === 'dostepna'
+                  ? 'var(--zielen)'
+                  : stan.stan === 'blad'
+                    ? 'var(--czerwien)'
+                    : 'var(--tekst-2)',
+            }}
+          >
+            {stan.komunikat}
+          </p>
+          {stan.aktualizacja && (
+            <button
+              onClick={() => window.open(stan.aktualizacja!.linkApk, '_blank')}
+              className="mt-2 w-full rounded-lg py-2 text-[12.5px] font-bold"
+              style={{ background: 'var(--zielen)', color: '#050609' }}
+            >
+              Pobierz {stan.aktualizacja.wersja}
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className="-mx-1 border-t border-white/5 pt-1">
+        <Przelacznik
+          etykieta="Sprawdzaj automatycznie"
+          opis="raz przy starcie i co 6 godzin"
+          wartosc={sprawdzaj}
+          naZmiane={(v) => ustaw('sprawdzajAktualizacje', v)}
+        />
+      </div>
+
+      <p className="mt-1 text-[10.5px] leading-relaxed" style={{ color: 'var(--tekst-3)' }}>
+        Aplikacja nie jest w sklepie Google Play, więc sama pilnuje wersji — sprawdza
+        wydania w repozytorium i proponuje pobranie nowszego pliku.{' '}
+        <a
+          href={STRONA_WYDAN}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ color: 'var(--fiolet)' }}
+        >
+          Zobacz wszystkie wydania
+        </a>
+        . Wersja przeglądarkowa i ta dodana do ekranu iPhone'a aktualizuje się sama.
+      </p>
+    </div>
   )
 }
 
