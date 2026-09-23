@@ -150,6 +150,21 @@ jobs:
           z ryzykiem utraty całego kapitału.
           KONIEC
 
+          # Link do pobrania wskazuje na NAJNOWSZE wydanie, więc plik IPA
+          # z poprzedniego trzeba przenieść dalej — inaczej po każdym buildzie
+          # Androida link dla iPhone'a zaczynałby zwracać 404. IPA powstaje
+          # rzadziej (osobny, ręcznie uruchamiany workflow na macOS).
+          PLIKI="dist-apk/btc-sygnaly.apk"
+          POPRZEDNIE="$(gh release list --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || true)"
+          if [ -n "$POPRZEDNIE" ]; then
+            if gh release download "$POPRZEDNIE" --pattern '*.ipa' --dir dist-apk 2>/dev/null; then
+              echo "Przenoszę IPA z wydania $POPRZEDNIE"
+              PLIKI="$PLIKI dist-apk/btc-sygnaly.ipa"
+            else
+              echo "Poprzednie wydanie nie miało pliku IPA — pomijam."
+            fi
+          fi
+
           # Ponowne uruchomienie tego samego przebiegu dałoby ten sam tag,
           # a wtedy "release create" kończy się błędem — sprzątamy najpierw.
           if gh release view "$TAG" >/dev/null 2>&1; then
@@ -157,11 +172,12 @@ jobs:
             gh release delete "$TAG" --yes --cleanup-tag
           fi
 
-          gh release create "$TAG" \
-            dist-apk/btc-sygnaly.apk \
+          # shellcheck disable=SC2086
+          gh release create "$TAG" $PLIKI \
             --title "BTC Sygnały $TAG" \
             --notes-file notatki.md \
             --latest
 
           echo "Wydanie opublikowane: $TAG"
-          echo "Link: https://github.com/${{ github.repository }}/releases/latest/download/btc-sygnaly.apk"
+          echo "Android: https://github.com/${{ github.repository }}/releases/latest/download/btc-sygnaly.apk"
+          echo "iPhone:  https://diketes.github.io/btc-sygnaly/"
