@@ -517,6 +517,14 @@ export interface WejscieAnalizy {
   teraz?: number
   /** Ostatni sygnał tego horyzontu – do sprawdzenia cooldownu. */
   poprzedniSygnal?: { kierunek: 'long' | 'short'; utworzony: number } | null
+  /**
+   * Tryb „Daj sygnał”: pomija progi wejścia i zawsze zwraca kierunek,
+   * w który przechyla się rynek. Poziomy (wejście, stop, cele) liczone są
+   * dokładnie tak samo jak zwykle — różnica jest wyłącznie w tym, że silnik
+   * nie odmawia, gdy przewaga jest za słaba. Wynikowy sygnał ma
+   * `naZadanie: true` i listę tego, czego mu zabrakło.
+   */
+  naZadanie?: boolean
 }
 
 export function analizuj(wejscie: WejscieAnalizy): WynikAnalizy {
@@ -549,6 +557,13 @@ export function analizuj(wejscie: WejscieAnalizy): WynikAnalizy {
     modyfikatory: policzModyfikatory(kontekst, p),
     cenaOdniesienia,
     utworzony: teraz,
+    postep: {
+      wynikUdzial: ogranicz(Math.abs(wynik) / p.progWyniku, 0, 1),
+      zgodnoscUdzial: ogranicz(zgodnosc / p.minZgodnosc, 0, 1),
+      progWyniku: p.progWyniku,
+      wymaganaZgodnosc: p.minZgodnosc,
+      sklonnosc: Math.abs(wynik) < 3 ? null : wynik > 0 ? 'long' : 'short',
+    },
   })
 
   if (oceny.length === 0 || swieceBazowe.length < 60) {
@@ -600,9 +615,13 @@ export function analizuj(wejscie: WejscieAnalizy): WynikAnalizy {
     }
   }
 
-  if (powodyCzekania.length > 0) {
+  const naZadanie = wejscie.naZadanie === true
+
+  // W trybie „Daj sygnał” nie odmawiamy – zapamiętujemy tylko, czego zabrakło.
+  if (powodyCzekania.length > 0 && !naZadanie) {
     return czekaj(powodyCzekania, wynik, zgodnosc, rezim)
   }
+  const brakiDoStandardu = naZadanie ? [...powodyCzekania] : []
 
   // --- budowa sygnału -----------------------------------------------------
   const kierunek = kierunekWstepny
@@ -669,7 +688,10 @@ export function analizuj(wejscie: WejscieAnalizy): WynikAnalizy {
   if (poziomDocelowy) {
     const kandydat = poziomDocelowy.cena
     const rKandydata = (znak * (kandydat - cenaWejscia)) / ryzykoOdWejscia
-    if (rKandydata > p.celeR[1] && rKandydata < p.celeR[2] * 1.6) surowe[2] = kandydat
+    // TP3 przyciągamy do realnego poziomu tylko wtedy, gdy leży wyraźnie dalej
+    // niż TP2. Bez tego marginesu poziom tuż nad TP2 robił z nich bliźniaki
+    // (np. TP2 1,8R i TP3 1,9R), co nie daje żadnej dodatkowej informacji.
+    if (rKandydata > p.celeR[1] * 1.25 && rKandydata < p.celeR[2] * 1.6) surowe[2] = kandydat
   }
 
   const cele: Cel[] = surowe.map((cenaCelu, i) => ({
@@ -683,14 +705,9 @@ export function analizuj(wejscie: WejscieAnalizy): WynikAnalizy {
 
   const rr = cele[1].r // R:R liczone do TP2 – realistyczny cel częściowego zamknięcia
   if (rr < p.minRR) {
-    return czekaj(
-      [
-        `Stosunek zysku do ryzyka ${rr.toFixed(2)} jest poniżej wymaganego ${p.minRR} – nie warto wchodzić.`,
-      ],
-      wynik,
-      zgodnosc,
-      rezim,
-    )
+    const powod = `Stosunek zysku do ryzyka ${rr.toFixed(2)} jest poniżej wymaganego ${p.minRR} – nie warto wchodzić.`
+    if (!naZadanie) return czekaj([powod], wynik, zgodnosc, rezim)
+    brakiDoStandardu.push(powod)
   }
 
   // --- pewność ------------------------------------------------------------
@@ -746,7 +763,7 @@ export function analizuj(wejscie: WejscieAnalizy): WynikAnalizy {
   }
 
   const sygnal: Sygnal = {
-    id: `${horyzont}-${kierunek}-${teraz}`,
+    id: `${horyzont}-${kierunek}-${naZadanie ? 'zad-' : ''}${teraz}`,
     horyzont,
     kierunek,
     utworzony: teraz,
@@ -778,11 +795,15 @@ export function analizuj(wejscie: WejscieAnalizy): WynikAnalizy {
         czas: teraz,
         typ: 'utworzony',
         cena: cenaOdniesienia,
-        opis: `Sygnał ${kierunek.toUpperCase()} (${p.nazwa.toLowerCase()}) wystawiony przy ${cenaOdniesienia.toFixed(0)} USDT.`,
+        opis: naZadanie
+          ? `Sygnał ${kierunek.toUpperCase()} (${p.nazwa.toLowerCase()}) pokazany na żądanie przy ${cenaOdniesienia.toFixed(0)} USDT.`
+          : `Sygnał ${kierunek.toUpperCase()} (${p.nazwa.toLowerCase()}) wystawiony przy ${cenaOdniesienia.toFixed(0)} USDT.`,
       },
     ],
     wynikR: null,
     zamkniety: null,
+    naZadanie,
+    brakiDoStandardu,
   }
 
   return sygnal

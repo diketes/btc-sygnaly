@@ -32,6 +32,8 @@ export interface ZadanieAnalizy {
   swieceWg: SwieceWgInterwalu
   kontekst: KontekstRynku
   poprzednie: Partial<Record<Horyzont, { kierunek: 'long' | 'short'; utworzony: number } | null>>
+  /** Tryb „Daj sygnał” – pomija progi i zawsze zwraca kierunek. */
+  naZadanie?: boolean
 }
 
 export interface ZadanieWskaznikow {
@@ -188,6 +190,7 @@ self.onmessage = (zdarzenie: MessageEvent<ZadanieWorkera>) => {
           swieceWg: zadanie.swieceWg,
           kontekst: zadanie.kontekst,
           poprzedniSygnal: zadanie.poprzednie[h] ?? null,
+          naZadanie: zadanie.naZadanie,
         })
       }
       const odpowiedz: OdpowiedzWorkera = { typ: 'analiza', id: zadanie.id, wynik }

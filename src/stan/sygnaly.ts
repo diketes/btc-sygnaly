@@ -18,26 +18,57 @@ import { drgnij, drgnijBlad, drgnijSukces, powiadom } from '@/lib/powiadomienia'
 import { poraNaPowiadomienie, uzyjUstawien } from './ustawienia'
 import { uzyjRynku } from './rynek'
 
+/** Punkt na wykresie wskazania silnika w czasie. */
+export interface PunktWskazania {
+  czas: number
+  wynik: number
+}
+
 interface StanSygnalow {
   analizy: Partial<Record<Horyzont, WynikAnalizy>>
   aktywne: Sygnal[]
   historia: Sygnal[]
+  /** Skuteczność zwykłych sygnałów – tych, które silnik wystawił sam. */
   statystyki: Statystyki
+  /** Skuteczność sygnałów wymuszonych przyciskiem „Daj sygnał”, osobno. */
+  statystykiNaZadanie: Statystyki
+  /** Ostatnie wskazania silnika – pokazywane jako mini-wykres. */
+  wskazania: Partial<Record<Horyzont, PunktWskazania[]>>
   liczenie: boolean
+  /** Trwa liczenie sygnału na żądanie (dla konkretnego horyzontu). */
+  liczenieNaZadanie: Horyzont | null
   ostatnieLiczenie: number | null
   /** Sygnał, który właśnie się pojawił – do animacji i efektów. */
   swiezySygnal: Sygnal | null
 
   wczytaj: () => Promise<void>
   przelicz: (tryb: TrybHoryzontu, kontekst: KontekstRynku) => Promise<void>
+  dajSygnal: (horyzont: Horyzont, kontekst: KontekstRynku) => Promise<void>
   sprawdzCeny: (cena: number) => Promise<void>
   wyczyscSwiezy: () => void
   wyczyscHistorie: () => Promise<void>
 }
 
-function przeliczStatystyki(historia: Sygnal[], aktywne: Sygnal[], ryzyko: number): Statystyki {
+/** Ile punktów wskazania trzymamy na horyzont (ok. 6 godzin przy liczeniu co 90 s). */
+const MAKS_WSKAZAN = 240
+
+/**
+ * Statystyki liczone osobno dla sygnałów własnych silnika i dla wymuszonych
+ * przyciskiem. Mieszanie ich zniekształcałoby obraz skuteczności: sygnały
+ * na żądanie z założenia nie przeszły progów, więc wypadają słabiej.
+ */
+function przeliczStatystyki(
+  historia: Sygnal[],
+  aktywne: Sygnal[],
+  ryzyko: number,
+): { zwykle: Statystyki; naZadanie: Statystyki } {
   const wszystkie = [...historia, ...aktywne]
-  return wszystkie.length > 0 ? policzStatystyki(wszystkie, ryzyko) : PUSTE_STATYSTYKI
+  const zwykle = wszystkie.filter((s) => !s.naZadanie)
+  const naZadanie = wszystkie.filter((s) => s.naZadanie)
+  return {
+    zwykle: zwykle.length > 0 ? policzStatystyki(zwykle, ryzyko) : PUSTE_STATYSTYKI,
+    naZadanie: naZadanie.length > 0 ? policzStatystyki(naZadanie, ryzyko) : PUSTE_STATYSTYKI,
+  }
 }
 
 export const uzyjSygnalow = create<StanSygnalow>((set, get) => ({
@@ -45,7 +76,10 @@ export const uzyjSygnalow = create<StanSygnalow>((set, get) => ({
   aktywne: [],
   historia: [],
   statystyki: PUSTE_STATYSTYKI,
+  statystykiNaZadanie: PUSTE_STATYSTYKI,
+  wskazania: {},
   liczenie: false,
+  liczenieNaZadanie: null,
   ostatnieLiczenie: null,
   swiezySygnal: null,
 
@@ -53,11 +87,41 @@ export const uzyjSygnalow = create<StanSygnalow>((set, get) => ({
     const wszystkie = await wczytajSygnaly()
     const aktywne = wszystkie.filter(czyAktywny)
     const historia = wszystkie.filter((s) => !czyAktywny(s))
-    set({
-      aktywne,
-      historia,
-      statystyki: przeliczStatystyki(historia, aktywne, uzyjUstawien.getState().ryzykoProc),
-    })
+    const st = przeliczStatystyki(historia, aktywne, uzyjUstawien.getState().ryzykoProc)
+    set({ aktywne, historia, statystyki: st.zwykle, statystykiNaZadanie: st.naZadanie })
+  },
+
+  /**
+   * „Daj sygnał” – pokazuje, w którą stronę silnik przechyla się w tej chwili,
+   * nawet gdy przewaga jest za słaba na zwykły sygnał. Wynik jest oznaczony
+   * i liczony w statystykach osobno.
+   */
+  async dajSygnal(horyzont, kontekst) {
+    if (get().liczenieNaZadanie) return
+    const swieceWg = uzyjRynku.getState().swieceWg
+    if (Object.keys(swieceWg).length === 0) return
+
+    set({ liczenieNaZadanie: horyzont })
+    try {
+      const wynik = await policzAnalize([horyzont], swieceWg, kontekst, {}, true)
+      const analiza = wynik[horyzont]
+      if (!analiza || !czySygnal(analiza)) return
+
+      // Zastępujemy ewentualny poprzedni sygnał na żądanie tego horyzontu –
+      // nie ma sensu trzymać kilku wymuszonych naraz.
+      const bezStarych = get().aktywne.filter((s) => !(s.naZadanie && s.horyzont === horyzont))
+      set({ aktywne: [...bezStarych, analiza], swiezySygnal: analiza })
+      await zapiszSygnal(analiza)
+      void drgnij('mocno')
+
+      const ustawienia = uzyjUstawien.getState()
+      set((s) => {
+        const st = przeliczStatystyki(s.historia, s.aktywne, ustawienia.ryzykoProc)
+        return { statystyki: st.zwykle, statystykiNaZadanie: st.naZadanie }
+      })
+    } finally {
+      set({ liczenieNaZadanie: null })
+    }
   },
 
   async przelicz(tryb, kontekst) {
@@ -82,7 +146,21 @@ export const uzyjSygnalow = create<StanSygnalow>((set, get) => ({
       }
 
       const wynik = await policzAnalize(horyzonty, swieceWg, kontekst, poprzednie)
-      set({ analizy: wynik as Partial<Record<Horyzont, WynikAnalizy>>, ostatnieLiczenie: Date.now() })
+      const teraz = Date.now()
+      set({ analizy: wynik as Partial<Record<Horyzont, WynikAnalizy>>, ostatnieLiczenie: teraz })
+
+      // Zapis wskazania do mini-wykresu: widać, czy rynek dojrzewa do sygnału,
+      // czy się od niego oddala.
+      set((s) => {
+        const nowe = { ...s.wskazania }
+        for (const h of horyzonty) {
+          const a = wynik[h]
+          if (!a) continue
+          const seria = nowe[h] ?? []
+          nowe[h] = [...seria, { czas: teraz, wynik: a.wynik }].slice(-MAKS_WSKAZAN)
+        }
+        return { wskazania: nowe }
+      })
 
       // Nowy sygnał przyjmujemy tylko, gdy dany horyzont nie ma otwartej pozycji.
       const ustawienia = uzyjUstawien.getState()
@@ -113,9 +191,10 @@ export const uzyjSygnalow = create<StanSygnalow>((set, get) => ({
         }
       }
 
-      set((s) => ({
-        statystyki: przeliczStatystyki(s.historia, s.aktywne, ustawienia.ryzykoProc),
-      }))
+      set((s) => {
+        const st = przeliczStatystyki(s.historia, s.aktywne, ustawienia.ryzykoProc)
+        return { statystyki: st.zwykle, statystykiNaZadanie: st.naZadanie }
+      })
     } finally {
       set({ liczenie: false })
     }
@@ -125,7 +204,36 @@ export const uzyjSygnalow = create<StanSygnalow>((set, get) => ({
     const aktywne = get().aktywne
     if (aktywne.length === 0 || !Number.isFinite(cena)) return
 
-    const { sygnaly, zmiany } = zaktualizujWszystkie(aktywne, cena)
+    // Sygnał z wejściem limitowym jest bezużyteczny, jeśli człowiek przegapi
+    // moment, w którym cena wraca na poziom zlecenia. Ostrzegamy raz, gdy
+    // brakuje już mniej niż 0,35%.
+    const ustawieniaCeny = uzyjUstawien.getState()
+    const doOznaczenia: Sygnal[] = []
+    for (const s of aktywne) {
+      if (s.powiadomionoOWejsciu) continue
+      const limit = Math.abs(s.wejscie - s.cenaOdniesienia) > 1e-9
+      if (!limit) continue
+      const odlegloscProc = (Math.abs(cena - s.wejscie) / s.wejscie) * 100
+      if (odlegloscProc > 0.35) continue
+
+      doOznaczenia.push({ ...s, powiadomionoOWejsciu: true })
+      if (ustawieniaCeny.powiadomieniaCele && poraNaPowiadomienie(ustawieniaCeny)) {
+        void powiadom({
+          tytul: `🎯 Cena przy wejściu · ${s.kierunek.toUpperCase()}`,
+          tresc:
+            `BTC ${Math.round(cena)} USDT, poziom wejścia ${Math.round(s.wejscie)}. ` +
+            `Stop ${Math.round(s.stopLoss)}, TP1 ${Math.round(s.cele[0].cena)}.`,
+          tag: `wejscie-${s.id}`,
+        })
+      }
+    }
+    if (doOznaczenia.length > 0) {
+      const mapa = new Map(doOznaczenia.map((s) => [s.id, s]))
+      set((s) => ({ aktywne: s.aktywne.map((x) => mapa.get(x.id) ?? x) }))
+      await zapiszSygnaly(doOznaczenia)
+    }
+
+    const { sygnaly, zmiany } = zaktualizujWszystkie(get().aktywne, cena)
     if (zmiany.length === 0) return
 
     const ustawienia = uzyjUstawien.getState()
@@ -157,9 +265,10 @@ export const uzyjSygnalow = create<StanSygnalow>((set, get) => ({
       }
     }
 
-    set((s) => ({
-      statystyki: przeliczStatystyki(s.historia, s.aktywne, ustawienia.ryzykoProc),
-    }))
+    set((s) => {
+      const st = przeliczStatystyki(s.historia, s.aktywne, ustawienia.ryzykoProc)
+      return { statystyki: st.zwykle, statystykiNaZadanie: st.naZadanie }
+    })
   },
 
   wyczyscSwiezy() {
@@ -168,7 +277,14 @@ export const uzyjSygnalow = create<StanSygnalow>((set, get) => ({
 
   async wyczyscHistorie() {
     await usunSygnaly()
-    set({ aktywne: [], historia: [], statystyki: PUSTE_STATYSTYKI, analizy: {} })
+    set({
+      aktywne: [],
+      historia: [],
+      statystyki: PUSTE_STATYSTYKI,
+      statystykiNaZadanie: PUSTE_STATYSTYKI,
+      wskazania: {},
+      analizy: {},
+    })
   },
 }))
 

@@ -10,6 +10,7 @@ import {
 import { wyczyscWszystko } from '@/dane/db'
 import { ZRODLA } from '@/dane/newsy/zrodla'
 import { GIELDY, stanZrodla, ustawGielde } from '@/dane/gieldy'
+import { eksportujHistorie, type WynikEksportu } from '@/lib/eksport'
 import { czyMamyZgode, popropZgode, ustawHaptyke } from '@/lib/powiadomienia'
 import { uzyjSygnalow } from '@/stan/sygnaly'
 import { uzyjUstawien } from '@/stan/ustawienia'
@@ -22,6 +23,7 @@ export function Ustawienia({ naZamknij }: { naZamknij: () => void }) {
   const wyczyscHistorie = uzyjSygnalow((s) => s.wyczyscHistorie)
   const [potwierdzenie, ustawPotwierdzenie] = useState<'historia' | 'wszystko' | null>(null)
   const [zgodaPowiadomien, ustawZgode] = useState<boolean | null>(null)
+  const [eksport, ustawEksport] = useState<WynikEksportu | null>(null)
 
   void czyMamyZgode().then((z) => {
     if (zgodaPowiadomien === null) ustawZgode(z)
@@ -213,6 +215,23 @@ export function Ustawienia({ naZamknij }: { naZamknij: () => void }) {
           <div className="karta space-y-2 p-4">
             {potwierdzenie === null ? (
               <>
+                <button
+                  onClick={async () => {
+                    const s = uzyjSygnalow.getState()
+                    ustawEksport(await eksportujHistorie([...s.historia, ...s.aktywne]))
+                  }}
+                  className="w-full rounded-xl bg-white/6 py-2.5 text-[13px] font-semibold"
+                >
+                  Eksportuj historię (CSV)
+                </button>
+                {eksport && (
+                  <p
+                    className="px-1 text-[11.5px] leading-relaxed"
+                    style={{ color: eksport.udane ? 'var(--zielen)' : 'var(--tekst-3)' }}
+                  >
+                    {eksport.komunikat}
+                  </p>
+                )}
                 <button
                   onClick={() => ustawPotwierdzenie('historia')}
                   className="w-full rounded-xl bg-white/6 py-2.5 text-[13px] font-semibold"

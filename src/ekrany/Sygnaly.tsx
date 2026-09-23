@@ -9,6 +9,7 @@ import {
   type RozbicieStatystyk,
 } from '@/analiza/statystyki'
 import { liczba, procent } from '@/lib/format'
+import { zbudujKontekstRynku } from '@/stan/kontekst'
 import { uzyjRynku } from '@/stan/rynek'
 import { uzyjSygnalow } from '@/stan/sygnaly'
 import { uzyjUstawien } from '@/stan/ustawienia'
@@ -21,7 +22,16 @@ type Karta = 'aktywne' | 'historia' | 'statystyki'
 
 export function Sygnaly() {
   const cena = uzyjRynku((s) => s.cena)
-  const { analizy, aktywne, historia, statystyki } = uzyjSygnalow()
+  const {
+    analizy,
+    aktywne,
+    historia,
+    statystyki,
+    statystykiNaZadanie,
+    wskazania,
+    liczenieNaZadanie,
+    dajSygnal,
+  } = uzyjSygnalow()
   const trybHoryzontu = uzyjUstawien((s) => s.trybHoryzontu)
   const ustaw = uzyjUstawien((s) => s.ustaw)
   const [karta, ustawKarte] = useState<Karta>('aktywne')
@@ -111,6 +121,9 @@ export function Sygnaly() {
                       analiza={analiza}
                       cenaBiezaca={cena}
                       rozwinieta={rozwiniety === id}
+                      wskazania={wskazania[h]}
+                      naDajSygnal={() => void dajSygnal(h, zbudujKontekstRynku())}
+                      liczySygnal={liczenieNaZadanie === h}
                       naKlik={() => ustawRozwiniety(rozwiniety === id ? null : id)}
                     />
                   )
@@ -153,7 +166,7 @@ export function Sygnaly() {
               exit={{ opacity: 0, x: 10 }}
               transition={{ duration: 0.18 }}
             >
-              {statystyki.liczba === 0 ? (
+              {statystyki.liczba === 0 && statystykiNaZadanie.liczba === 0 ? (
                 <div className="karta">
                   <PustyStan
                     tytul="Za mało danych"
@@ -163,7 +176,16 @@ export function Sygnaly() {
                 </div>
               ) : (
                 <>
-                  <div className="mb-4 grid grid-cols-2 gap-3">
+                  {statystyki.liczba === 0 && (
+                    <div className="karta mb-4 p-4">
+                      <p className="text-[12.5px] leading-relaxed" style={{ color: 'var(--tekst-2)' }}>
+                        Nie ma jeszcze zamkniętych sygnałów wystawionych przez sam silnik — poniżej
+                        widać tylko te wymuszone przyciskiem „Daj sygnał”.
+                      </p>
+                    </div>
+                  )}
+
+                  <div className={statystyki.liczba === 0 ? 'hidden' : 'mb-4 grid grid-cols-2 gap-3'}>
                     <Kafelek
                       etykieta="Skuteczność"
                       wartosc={`${statystyki.skutecznosc.toFixed(0)}%`}
@@ -194,6 +216,7 @@ export function Sygnaly() {
                     />
                   </div>
 
+                  <div className={statystyki.liczba === 0 ? 'hidden' : ''}>
                   <Sekcja tytul="Trafienia celów">
                     <div className="karta space-y-2.5 p-4">
                       {(['tp1', 'tp2', 'tp3'] as const).map((tp, i) => {
@@ -224,6 +247,51 @@ export function Sygnaly() {
                   </Sekcja>
 
                   <KrzywaKapitalu punkty={statystyki.krzywaKapitalu} />
+                  </div>
+
+                  {statystykiNaZadanie.liczba > 0 && (
+                    <Sekcja tytul="Sygnały na żądanie – osobno">
+                      <div className="karta p-4">
+                        <p className="mb-2.5 text-[11.5px] leading-relaxed" style={{ color: 'var(--tekst-3)' }}>
+                          Wymuszone przyciskiem „Daj sygnał”. Nie przeszły progów silnika, więc
+                          z założenia wypadają słabiej — dlatego nie są wliczane do skuteczności
+                          powyżej.
+                        </p>
+                        <div className="grid grid-cols-3 gap-2">
+                          {[
+                            {
+                              e: 'Skuteczność',
+                              w: `${statystykiNaZadanie.skutecznosc.toFixed(0)}%`,
+                              k:
+                                statystykiNaZadanie.skutecznosc >= statystyki.skutecznosc
+                                  ? 'var(--zielen)'
+                                  : 'var(--czerwien)',
+                            },
+                            {
+                              e: 'Średnie R',
+                              w: `${statystykiNaZadanie.sredniR >= 0 ? '+' : ''}${liczba(statystykiNaZadanie.sredniR)}`,
+                              k: statystykiNaZadanie.sredniR >= 0 ? 'var(--zielen)' : 'var(--czerwien)',
+                            },
+                            { e: 'Sygnałów', w: String(statystykiNaZadanie.liczba), k: undefined },
+                          ].map((x) => (
+                            <div key={x.e} className="rounded-xl bg-white/4 p-2 text-center">
+                              <p className="etykieta mb-0.5">{x.e}</p>
+                              <p className="cyfry text-[14px] font-bold" style={{ color: x.k }}>
+                                {x.w}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                        {statystyki.liczba > 0 && (
+                          <p className="mt-2.5 text-[11.5px]" style={{ color: 'var(--tekst-2)' }}>
+                            Dla porównania zwykłe sygnały: {statystyki.skutecznosc.toFixed(0)}% trafień,
+                            średnio {statystyki.sredniR >= 0 ? '+' : ''}
+                            {liczba(statystyki.sredniR)}R.
+                          </p>
+                        )}
+                      </div>
+                    </Sekcja>
+                  )}
 
                   <Sekcja tytul="W rozbiciu">
                     <div className="space-y-3">

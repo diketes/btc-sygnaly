@@ -77,6 +77,7 @@ export async function policzAnalize(
   swieceWg: SwieceWgInterwalu,
   kontekst: KontekstRynku,
   poprzednie: Partial<Record<Horyzont, { kierunek: 'long' | 'short'; utworzony: number } | null>> = {},
+  naZadanie = false,
 ): Promise<Record<string, WynikAnalizy>> {
   try {
     return await wyslij<Record<string, WynikAnalizy>>({
@@ -85,6 +86,7 @@ export async function policzAnalize(
       swieceWg,
       kontekst,
       poprzednie,
+      naZadanie,
     })
   } catch {
     // Zapas na głównym wątku – lepiej zamrugać niż nie pokazać sygnału.
@@ -95,6 +97,7 @@ export async function policzAnalize(
         swieceWg,
         kontekst,
         poprzedniSygnal: poprzednie[h] ?? null,
+        naZadanie,
       })
     }
     return wynik

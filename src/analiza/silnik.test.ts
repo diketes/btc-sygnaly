@@ -297,3 +297,127 @@ describe('cykl życia sygnału', () => {
     expect(zmienil).toBe(false)
   })
 })
+
+describe('silnik – tryb „Daj sygnał”', () => {
+  // Rynek w konsolidacji: normalnie silnik odmawia.
+  const swieceWg = zestaw('krotki', { dryf: 0, szum: 0.003, powrotDoSredniej: 0.25, ziarno: 777 })
+
+  it('bez trybu na żądanie silnik nadal odmawia', () => {
+    expect(czyCzekaj(analizuj({ horyzont: 'krotki', swieceWg }))).toBe(true)
+  })
+
+  it('na żądanie zawsze zwraca kierunek', () => {
+    const wynik = analizuj({ horyzont: 'krotki', swieceWg, naZadanie: true })
+    expect(czySygnal(wynik)).toBe(true)
+    if (czySygnal(wynik)) expect(['long', 'short']).toContain(wynik.kierunek)
+  })
+
+  it('kierunek zgadza się ze znakiem wskazania', () => {
+    const czekajacy = analizuj({ horyzont: 'krotki', swieceWg })
+    const wymuszony = analizuj({ horyzont: 'krotki', swieceWg, naZadanie: true })
+    if (!czySygnal(wymuszony)) return
+    expect(wymuszony.kierunek).toBe(czekajacy.wynik >= 0 ? 'long' : 'short')
+  })
+
+  it('jest oznaczony i wylicza, czego mu zabrakło', () => {
+    const wynik = analizuj({ horyzont: 'krotki', swieceWg, naZadanie: true })
+    if (!czySygnal(wynik)) return
+    expect(wynik.naZadanie).toBe(true)
+    expect(wynik.brakiDoStandardu.length).toBeGreaterThan(0)
+    expect(wynik.id).toContain('zad-')
+  })
+
+  it('poziomy liczone są tak samo jak w zwykłym sygnale', () => {
+    // Trend, w którym powstaje też zwykły sygnał – oba muszą dać te same liczby.
+    const trend = zestaw('dlugi', { dryf: 0.006, szum: 0.004 })
+    const czas = Date.UTC(2026, 5, 1)
+    const zwykly = analizuj({ horyzont: 'dlugi', swieceWg: trend, teraz: czas })
+    const wymuszony = analizuj({ horyzont: 'dlugi', swieceWg: trend, teraz: czas, naZadanie: true })
+    if (!czySygnal(zwykly) || !czySygnal(wymuszony)) return
+
+    expect(wymuszony.wejscie).toBeCloseTo(zwykly.wejscie, 6)
+    expect(wymuszony.stopLoss).toBeCloseTo(zwykly.stopLoss, 6)
+    expect(wymuszony.cele.map((c) => c.cena)).toEqual(zwykly.cele.map((c) => c.cena))
+    expect(wymuszony.pewnosc).toBe(zwykly.pewnosc)
+  })
+
+  it('gdy zwykły sygnał i tak by powstał, lista braków jest pusta', () => {
+    const trend = zestaw('dlugi', { dryf: 0.006, szum: 0.004 })
+    const wynik = analizuj({ horyzont: 'dlugi', swieceWg: trend, naZadanie: true })
+    if (!czySygnal(wynik)) return
+    expect(wynik.brakiDoStandardu).toEqual([])
+  })
+
+  it('pomija blokadę po poprzednim sygnale', () => {
+    const trend = zestaw('dlugi', { dryf: 0.006, szum: 0.004 })
+    const zablokowany = analizuj({
+      horyzont: 'dlugi',
+      swieceWg: trend,
+      poprzedniSygnal: { kierunek: 'long', utworzony: Date.UTC(2026, 5, 1) },
+      teraz: Date.UTC(2026, 5, 1) + 3_600_000,
+    })
+    const wymuszony = analizuj({
+      horyzont: 'dlugi',
+      swieceWg: trend,
+      poprzedniSygnal: { kierunek: 'long', utworzony: Date.UTC(2026, 5, 1) },
+      teraz: Date.UTC(2026, 5, 1) + 3_600_000,
+      naZadanie: true,
+    })
+    expect(czyCzekaj(zablokowany)).toBe(true)
+    expect(czySygnal(wymuszony)).toBe(true)
+  })
+})
+
+describe('karta „Czekaj” – dane o postępie', () => {
+  it('pokazuje, jak daleko do progu sygnału', () => {
+    const wynik = analizuj({
+      horyzont: 'krotki',
+      swieceWg: zestaw('krotki', { dryf: 0, szum: 0.003, powrotDoSredniej: 0.25, ziarno: 777 }),
+    })
+    if (!czyCzekaj(wynik)) return
+    expect(wynik.postep.progWyniku).toBe(PROFILE.krotki.progWyniku)
+    expect(wynik.postep.wymaganaZgodnosc).toBe(PROFILE.krotki.minZgodnosc)
+    expect(wynik.postep.wynikUdzial).toBeGreaterThanOrEqual(0)
+    expect(wynik.postep.wynikUdzial).toBeLessThanOrEqual(1)
+    expect(wynik.postep.zgodnoscUdzial).toBeGreaterThanOrEqual(0)
+    expect(wynik.postep.zgodnoscUdzial).toBeLessThanOrEqual(1)
+  })
+
+  it('udział wyniku odpowiada stosunkowi wskazania do progu', () => {
+    const wynik = analizuj({
+      horyzont: 'dlugi',
+      swieceWg: zestaw('dlugi', { dryf: 0.0012, szum: 0.004, ziarno: 31337 }),
+    })
+    if (!czyCzekaj(wynik)) return
+    const oczekiwany = Math.min(1, Math.abs(wynik.wynik) / PROFILE.dlugi.progWyniku)
+    expect(wynik.postep.wynikUdzial).toBeCloseTo(oczekiwany, 6)
+  })
+})
+
+describe('silnik – odstępy między celami', () => {
+  it('TP3 leży wyraźnie dalej niż TP2, nie tuż obok', () => {
+    // Sprawdzamy na wielu układach rynku: przyciąganie TP3 do poziomu S/R
+    // nie może sprawić, że TP2 i TP3 stają się praktycznie tym samym celem.
+    const przypadki = [
+      { horyzont: 'dlugi' as const, dryf: 0.006, ziarno: 1 },
+      { horyzont: 'dlugi' as const, dryf: -0.006, ziarno: 2 },
+      { horyzont: 'krotki' as const, dryf: 0.004, ziarno: 3 },
+      { horyzont: 'krotki' as const, dryf: -0.004, ziarno: 4 },
+      { horyzont: 'krotki' as const, dryf: 0.001, ziarno: 5 },
+    ]
+
+    let sprawdzonych = 0
+    for (const c of przypadki) {
+      const wynik = analizuj({
+        horyzont: c.horyzont,
+        swieceWg: zestaw(c.horyzont, { dryf: c.dryf, szum: 0.004, ziarno: c.ziarno }),
+        naZadanie: true,
+      })
+      if (!czySygnal(wynik)) continue
+      sprawdzonych++
+      const [, tp2, tp3] = wynik.cele
+      expect(tp3.r).toBeGreaterThan(tp2.r * 1.2)
+    }
+    expect(sprawdzonych).toBeGreaterThan(0)
+  })
+})

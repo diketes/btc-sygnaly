@@ -56,6 +56,32 @@ dane z rynku terminowego.
 
 Po trafieniu TP1 stop automatycznie przesuwa się na próg rentowności.
 
+### Gdy sygnału nie ma
+
+Karta „Czekaj” nie jest martwym ekranem — pokazuje, **jak blisko sygnału jesteśmy**:
+paski siły wskazania (np. 18 / 35) i zgodności interwałów (2 / 3), w którą stronę
+rynek się przechyla, oraz mini-wykres wskazania w czasie z zaznaczonymi progami.
+Od razu widać, czy rynek dojrzewa do sygnału, czy się od niego oddala.
+
+Jest tam też przycisk **„Daj sygnał mimo to”**. Liczy sygnał z tych samych danych,
+ale bez progów wejścia — pokazuje, w którą stronę silnik przechyla się w tej chwili,
+z pełnymi poziomami. Taki sygnał:
+
+- ma plakietkę **NA ŻĄDANIE** i listę tego, czego mu zabrakło do zwykłego sygnału,
+- ma uczciwie policzoną pewność, która przy słabym rynku wychodzi bardzo niska
+  (widziane 1%, gdy wskazanie wynosiło −1 przy progu 35),
+- **liczy się w statystykach osobno**, żeby nie zniekształcać skuteczności sygnałów,
+  które silnik wystawił sam.
+
+To świadomy kompromis: dostajesz odpowiedź na pytanie „co byś teraz zagrał”,
+ale aplikacja nie udaje, że to pełnowartościowy sygnał.
+
+### Rozjazd horyzontów
+
+Gdy krótki termin ciągnie w górę, a długi w dół (albo odwrotnie), na pulpicie
+pojawia się ostrzeżenie z obiema liczbami. Zwykle oznacza to korektę wewnątrz
+nadrzędnego trendu — pozycja zgodna z krótkim terminem idzie wtedy pod prąd.
+
 ## Szybki start
 
 ```bash
@@ -210,7 +236,7 @@ przed celem w obrębie tej samej świecy:
 
 | Horyzont | Okres  | Transakcji | Skuteczność | Średnie R | Profit factor | Maks. obsunięcie |
 | -------- | ------ | ---------- | ----------- | --------- | ------------- | ---------------- |
-| Długi    | 4 lata | 23 (6/rok) | 47,8%       | +0,33     | 1,81          | 7,0%             |
+| Długi    | 4 lata | 23 (6/rok) | 47,8%       | +0,45     | 2,09          | 7,0%             |
 | Krótki   | 120 dni | 68 (207/rok) | 29,4%     | +0,27     | 1,66          | 7,0%             |
 
 **Jak to czytać.** Przy krótkim terminie niska skuteczność nie oznacza strat: 56%
@@ -231,13 +257,22 @@ Powtórz u siebie: `npm run backtest`.
   włączenia, poziomy S/R i Fibonacciego, znaczniki wejścia/SL/TP aktywnego sygnału,
   panel RSI / MACD / Stoch pod spodem.
 - **Sygnały** — aktywne, pełna historia (także przegrane) i statystyki skuteczności
-  z krzywą kapitału oraz rozbiciem na horyzont, kierunek, pewność i reżim rynku.
+  z krzywą kapitału oraz rozbiciem na horyzont, kierunek, pewność i reżim rynku;
+  sygnały na żądanie mają własną, osobną sekcję z porównaniem do zwykłych.
 - **Newsy** — „Co może ruszyć BTC”, kalendarz makro z odliczaniem, filtry kategorii,
   karty klastrów z listą źródeł.
 - **Rynek** — funding z historią, open interest, pozycjonowanie, likwidacje na żywo,
   dominacja BTC, dane sieci Bitcoin; w zakładce Narzędzia kalkulator pozycji i alerty.
 - **Ustawienia** — horyzont, progi powiadomień, cisza nocna, źródła danych, kanały
-  newsowe, tryb oszczędzania baterii, kasowanie danych.
+  newsowe, tryb oszczędzania baterii, aktualizacje, eksport historii do CSV,
+  kasowanie danych.
+
+## Powiadomienia
+
+Poza nowym sygnałem i trafionym celem aplikacja odzywa się jeszcze, gdy **cena
+dochodzi do poziomu wejścia** sygnału ze zleceniem limitowym (bliżej niż 0,35%).
+Bez tego łatwo przegapić moment, w którym cena wraca na poziom zlecenia i cały
+sygnał staje się bezużyteczny. Ostrzeżenie idzie raz na sygnał.
 
 ## Wygląd i efekty
 

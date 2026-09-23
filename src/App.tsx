@@ -16,13 +16,14 @@ import { App as AplikacjaNatywna } from '@capacitor/app'
 import { SplashScreen } from '@capacitor/splash-screen'
 import { StatusBar, Style } from '@capacitor/status-bar'
 import { atr, ostatnia } from '@/analiza/wskazniki'
-import { PUSTY_KONTEKST, type KontekstRynku } from '@/analiza/typy'
+import type { KontekstRynku } from '@/analiza/typy'
 import { NATYWNIE } from '@/lib/http'
 import { cena as fCena } from '@/lib/format'
 import { popropZgode, powiadom, ustawHaptyke } from '@/lib/powiadomienia'
 import { wczytajAlerty, zapiszAlert } from '@/dane/db'
-import { podsumujLikwidacje, uzyjRynku } from '@/stan/rynek'
-import { ryzykoDlaSilnika, uzyjNewsow } from '@/stan/newsy'
+import { uzyjRynku } from '@/stan/rynek'
+import { zbudujKontekstRynku } from '@/stan/kontekst'
+import { uzyjNewsow } from '@/stan/newsy'
 import { uzyjSygnalow } from '@/stan/sygnaly'
 import { uzyjUstawien } from '@/stan/ustawienia'
 import {
@@ -188,21 +189,7 @@ export function App() {
   }, [trybHoryzontu, gotowe, zaakceptowano])
 
   // --- kontekst rynkowy dla silnika ---------------------------------------
-  const zbudujKontekst = useCallback((): KontekstRynku => {
-    const { migawka, likwidacje } = uzyjRynku.getState()
-    const lik = podsumujLikwidacje(likwidacje, 15)
-    return {
-      ...PUSTY_KONTEKST,
-      funding: migawka?.funding?.ostatni ?? null,
-      fundingSrednia: migawka?.funding?.srednia24h ?? null,
-      longShort: migawka?.longShort?.ratio ?? null,
-      zmianaOi24h: migawka?.oi?.zmiana24hProc ?? null,
-      likwidacjeLong15m: lik.long,
-      likwidacjeShort15m: lik.short,
-      strachChciwosc: migawka?.strachChciwosc?.wartosc ?? null,
-      ryzykoNewsow: ryzykoDlaSilnika(),
-    }
-  }, [])
+  const zbudujKontekst = useCallback((): KontekstRynku => zbudujKontekstRynku(), [])
 
   // --- przeliczanie analizy ------------------------------------------------
   useEffect(() => {

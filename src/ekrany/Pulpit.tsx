@@ -4,6 +4,7 @@ import { horyzontyDlaTrybu, PROFILE } from '@/analiza/profile'
 import { czySygnal } from '@/analiza/typy'
 import { cena as fCena, kwota, procent, temu } from '@/lib/format'
 import { uzyjNewsow } from '@/stan/newsy'
+import { zbudujKontekstRynku } from '@/stan/kontekst'
 import { podsumujLikwidacje, uzyjRynku } from '@/stan/rynek'
 import { uzyjSygnalow } from '@/stan/sygnaly'
 import { uzyjUstawien } from '@/stan/ustawienia'
@@ -25,7 +26,7 @@ interface Props {
 export function Pulpit({ naUstawienia, naSygnal, naNewsy }: Props) {
   const { cena, ticker, status, migawka, likwidacje, ostatnieDane, danieZPamieci, odswiezSwiece, odswiezMigawke } =
     uzyjRynku()
-  const { analizy, aktywne } = uzyjSygnalow()
+  const { analizy, aktywne, wskazania, liczenieNaZadanie, dajSygnal } = uzyjSygnalow()
   const { klastry, kalendarz } = uzyjNewsow()
   const trybHoryzontu = uzyjUstawien((s) => s.trybHoryzontu)
   const ustaw = uzyjUstawien((s) => s.ustaw)
@@ -139,12 +140,17 @@ export function Pulpit({ naUstawienia, naSygnal, naNewsy }: Props) {
                   key={h}
                   analiza={analiza}
                   cenaBiezaca={cena}
+                  wskazania={wskazania[h]}
+                  naDajSygnal={() => void dajSygnal(h, zbudujKontekstRynku())}
+                  liczySygnal={liczenieNaZadanie === h}
                   naKlik={czySygnal(analiza) ? () => naSygnal(analiza.id) : undefined}
                 />
               )
             })}
           </div>
         </Sekcja>
+
+        <RozjazdHoryzontow />
 
         {/* Nastroje i szybkie liczby */}
         <Sekcja tytul="Nastroje rynku">
@@ -280,5 +286,57 @@ export function Pulpit({ naUstawienia, naSygnal, naNewsy }: Props) {
         </div>
       </div>
     </Ekran>
+  )
+}
+
+/**
+ * Ostrzeżenie, gdy krótki i długi horyzont wskazują w przeciwne strony.
+ *
+ * To nie jest błąd — krótkoterminowa korekta w długim trendzie wzrostowym jest
+ * normalna. Ale jeśli ktoś patrzy tylko na jedną kartę, łatwo tego nie zauważyć
+ * i wejść w pozycję pod prąd nadrzędnego kierunku.
+ */
+function RozjazdHoryzontow() {
+  const analizy = uzyjSygnalow((s) => s.analizy)
+  const aktywne = uzyjSygnalow((s) => s.aktywne)
+
+  const wynikDla = (h: 'krotki' | 'dlugi') => {
+    const sygnal = aktywne.find((s) => s.horyzont === h)
+    if (sygnal) return sygnal.wynik
+    const a = analizy[h]
+    return a ? a.wynik : null
+  }
+
+  const krotki = wynikDla('krotki')
+  const dlugi = wynikDla('dlugi')
+
+  // Reagujemy dopiero przy wyraźnym rozjeździe – drobne wahania to szum.
+  const PROG = 15
+  if (krotki === null || dlugi === null) return null
+  if (Math.abs(krotki) < PROG || Math.abs(dlugi) < PROG) return null
+  if (Math.sign(krotki) === Math.sign(dlugi)) return null
+
+  const krotkiWGore = krotki > 0
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="karta mb-5 flex items-start gap-3 p-3.5"
+      style={{ borderColor: 'rgba(247,147,26,0.3)' }}
+    >
+      <IkonaOstrzezenie rozmiar={17} klasa="mt-0.5 shrink-0 text-[#F7931A]" />
+      <div>
+        <p className="mb-0.5 text-[12.5px] font-semibold" style={{ color: '#F7931A' }}>
+          Horyzonty wskazują w przeciwne strony
+        </p>
+        <p className="text-[11.5px] leading-relaxed" style={{ color: 'var(--tekst-2)' }}>
+          Krótki termin ciągnie {krotkiWGore ? 'w górę' : 'w dół'} ({krotki > 0 ? '+' : ''}
+          {krotki.toFixed(0)}), długi {krotkiWGore ? 'w dół' : 'w górę'} ({dlugi > 0 ? '+' : ''}
+          {dlugi.toFixed(0)}). Zwykle znaczy to korektę wewnątrz nadrzędnego trendu — pozycja
+          zgodna z krótkim terminem idzie wtedy pod prąd i warto ją trzymać krócej.
+        </p>
+      </div>
+    </motion.div>
   )
 }

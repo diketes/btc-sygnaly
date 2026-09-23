@@ -127,6 +127,18 @@ export interface Sygnal {
   /** Wynik w R po zamknięciu (dodatni = zysk). */
   wynikR: number | null
   zamkniety: number | null
+
+  /**
+   * Sygnał wymuszony przyciskiem „Daj sygnał”, a nie wystawiony samodzielnie
+   * przez silnik. Powstaje z tych samych danych, ale z pominięciem progów,
+   * więc jest z założenia słabszy. Liczony w statystykach OSOBNO, żeby nie
+   * zawyżał ani nie zaniżał skuteczności zwykłych sygnałów.
+   */
+  naZadanie: boolean
+  /** Czego zabrakło do normalnego sygnału (puste przy zwykłym sygnale). */
+  brakiDoStandardu: string[]
+  /** Czy wysłano już powiadomienie o zbliżeniu ceny do wejścia. */
+  powiadomionoOWejsciu?: boolean
 }
 
 /** Zwracane, gdy warunki nie pozwalają wystawić sygnału. */
@@ -141,6 +153,20 @@ export interface Czekaj {
   modyfikatory: Modyfikator[]
   cenaOdniesienia: number
   utworzony: number
+  /**
+   * Jak blisko jesteśmy sygnału — do paska postępu na karcie „Czekaj”.
+   * Dzięki temu czekanie nie wygląda jak martwy ekran.
+   */
+  postep: {
+    /** 0–1: |wynik| względem progu profilu. */
+    wynikUdzial: number
+    /** 0–1: zgodność interwałów względem wymaganej. */
+    zgodnoscUdzial: number
+    progWyniku: number
+    wymaganaZgodnosc: number
+    /** W którą stronę przechyla się rynek, nawet jeśli za słabo na sygnał. */
+    sklonnosc: Kierunek | null
+  }
 }
 
 export type WynikAnalizy = Sygnal | Czekaj

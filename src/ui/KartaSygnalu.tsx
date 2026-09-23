@@ -80,7 +80,65 @@ function PasekPewnosci({ wartosc, kolor }: { wartosc: number; kolor: string }) {
 
 // ------------------------------------------------------------------ czekaj
 
-function KartaCzekaj({ analiza }: { analiza: Czekaj }) {
+/** Mini-wykres wskazania silnika w czasie – widać, czy rynek dojrzewa do sygnału. */
+function WykresWskazania({ punkty, prog }: { punkty: { czas: number; wynik: number }[]; prog: number }) {
+  if (punkty.length < 3) return null
+
+  const szer = 300
+  const wys = 44
+  // Skala symetryczna względem zera, minimum tak duże, żeby próg był widoczny.
+  const maks = Math.max(prog * 1.2, ...punkty.map((p) => Math.abs(p.wynik)), 10)
+  const naY = (w: number) => wys / 2 - (w / maks) * (wys / 2 - 2)
+  const naX = (i: number) => (i / (punkty.length - 1)) * szer
+
+  const sciezka = punkty.map((p, i) => `${i === 0 ? 'M' : 'L'}${naX(i).toFixed(1)},${naY(p.wynik).toFixed(1)}`).join(' ')
+  const ostatni = punkty[punkty.length - 1].wynik
+
+  return (
+    <div className="mt-3">
+      <div className="mb-1 flex items-center justify-between">
+        <span className="etykieta">Wskazanie w czasie</span>
+        <span className="text-[10px]" style={{ color: 'var(--tekst-3)' }}>
+          ostatnie {punkty.length} odczytów
+        </span>
+      </div>
+      <svg viewBox={`0 0 ${szer} ${wys}`} className="w-full" preserveAspectRatio="none" aria-hidden>
+        {/* Progi wystawienia sygnału – w górę i w dół. */}
+        <line x1="0" y1={naY(prog)} x2={szer} y2={naY(prog)} stroke="rgba(0,226,138,0.3)" strokeWidth="1" strokeDasharray="4 4" />
+        <line x1="0" y1={naY(-prog)} x2={szer} y2={naY(-prog)} stroke="rgba(255,59,92,0.3)" strokeWidth="1" strokeDasharray="4 4" />
+        <line x1="0" y1={naY(0)} x2={szer} y2={naY(0)} stroke="rgba(255,255,255,0.12)" strokeWidth="1" />
+        <path
+          d={sciezka}
+          fill="none"
+          stroke={ostatni >= 0 ? 'var(--zielen)' : 'var(--czerwien)'}
+          strokeWidth="1.8"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
+        />
+      </svg>
+    </div>
+  )
+}
+
+interface PropsCzekaj {
+  analiza: Czekaj
+  /** Historia wskazań do mini-wykresu. */
+  wskazania?: { czas: number; wynik: number }[]
+  /** Wywoływane po naciśnięciu „Daj sygnał”. */
+  naDajSygnal?: () => void
+  liczySygnal?: boolean
+}
+
+function KartaCzekaj({ analiza, wskazania, naDajSygnal, liczySygnal }: PropsCzekaj) {
+  const { postep } = analiza
+  const kolorSklonnosci =
+    postep.sklonnosc === 'long'
+      ? 'var(--zielen)'
+      : postep.sklonnosc === 'short'
+        ? 'var(--czerwien)'
+        : 'var(--tekst-2)'
+
   return (
     <motion.div
       layout
@@ -98,11 +156,55 @@ function KartaCzekaj({ analiza }: { analiza: Czekaj }) {
         <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/6">
           <IkonaZegar rozmiar={20} klasa="text-white/45" />
         </div>
-        <div>
+        <div className="min-w-0 flex-1">
           <p className="naglowek text-lg font-semibold">Czekaj</p>
           <p className="text-[12px]" style={{ color: 'var(--tekst-2)' }}>
-            Rynek nie daje przewagi żadnej ze stron
+            {postep.sklonnosc
+              ? `Rynek lekko przechyla się w stronę ${postep.sklonnosc === 'long' ? 'wzrostów' : 'spadków'}`
+              : 'Rynek nie daje przewagi żadnej ze stron'}
           </p>
+        </div>
+      </div>
+
+      {/* Ile brakuje do sygnału – czekanie przestaje być martwym ekranem. */}
+      <div className="mb-3 space-y-2 rounded-2xl bg-black/25 p-3">
+        <div>
+          <div className="mb-1 flex items-baseline justify-between">
+            <span className="text-[11.5px]" style={{ color: 'var(--tekst-2)' }}>
+              Siła wskazania
+            </span>
+            <span className="cyfry text-[11.5px] font-semibold" style={{ color: kolorSklonnosci }}>
+              {Math.abs(analiza.wynik).toFixed(0)} / {postep.progWyniku}
+            </span>
+          </div>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/8">
+            <motion.div
+              className="h-full rounded-full"
+              style={{ background: kolorSklonnosci }}
+              initial={{ width: 0 }}
+              animate={{ width: `${postep.wynikUdzial * 100}%` }}
+              transition={SPREZYNA}
+            />
+          </div>
+        </div>
+
+        <div>
+          <div className="mb-1 flex items-baseline justify-between">
+            <span className="text-[11.5px]" style={{ color: 'var(--tekst-2)' }}>
+              Zgodność interwałów
+            </span>
+            <span className="cyfry text-[11.5px] font-semibold">
+              {analiza.zgodnosc} / {postep.wymaganaZgodnosc}
+            </span>
+          </div>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/8">
+            <motion.div
+              className="h-full rounded-full bg-white/50"
+              initial={{ width: 0 }}
+              animate={{ width: `${postep.zgodnoscUdzial * 100}%` }}
+              transition={SPREZYNA}
+            />
+          </div>
         </div>
       </div>
 
@@ -115,24 +217,24 @@ function KartaCzekaj({ analiza }: { analiza: Czekaj }) {
         ))}
       </ul>
 
-      <div className="mt-3 flex items-center justify-between border-t border-white/6 pt-2.5">
-        <span className="etykieta">Wskazanie</span>
-        <span
-          className="cyfry text-[13px] font-semibold"
-          style={{
-            color:
-              analiza.wynik > 8
-                ? 'var(--zielen)'
-                : analiza.wynik < -8
-                  ? 'var(--czerwien)'
-                  : 'var(--tekst-2)',
-          }}
-        >
-          {analiza.wynik > 0 ? '+' : ''}
-          {analiza.wynik.toFixed(0)} / 100
-          <span style={{ color: 'var(--tekst-3)' }}> · zgodność {analiza.zgodnosc}</span>
-        </span>
-      </div>
+      {wskazania && <WykresWskazania punkty={wskazania} prog={postep.progWyniku} />}
+
+      {naDajSygnal && (
+        <div className="mt-3 border-t border-white/6 pt-3">
+          <button
+            onClick={naDajSygnal}
+            disabled={liczySygnal}
+            className="w-full rounded-xl py-2.5 text-[13px] font-bold active:scale-[0.98] disabled:opacity-60"
+            style={{ background: 'rgba(247,147,26,0.16)', color: 'var(--zloto)' }}
+          >
+            {liczySygnal ? 'Liczę…' : 'Daj sygnał mimo to'}
+          </button>
+          <p className="mt-1.5 text-[10.5px] leading-relaxed" style={{ color: 'var(--tekst-3)' }}>
+            Pokaże, w którą stronę silnik przechyla się w tej chwili, z pełnymi poziomami.
+            Taki sygnał nie przeszedł progów, więc jest słabszy — i liczy się w statystykach osobno.
+          </p>
+        </div>
+      )}
     </motion.div>
   )
 }
@@ -179,7 +281,12 @@ export function KartaAktywnegoSygnalu({
 
       <div className="mb-3 flex items-start justify-between gap-2">
         <Naglowek horyzont={sygnal.horyzont} />
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
+          {sygnal.naZadanie && (
+            <span className="rounded-full bg-[#F7931A]/15 px-2 py-1 text-[10px] font-semibold text-[#F7931A]">
+              NA ŻĄDANIE
+            </span>
+          )}
           {sygnal.podwyzszoneRyzyko && (
             <span className="flex items-center gap-1 rounded-full bg-[#F7931A]/15 px-2 py-1 text-[10px] font-semibold text-[#F7931A]">
               <IkonaOstrzezenie rozmiar={11} />
@@ -189,6 +296,22 @@ export function KartaAktywnegoSygnalu({
           <span className="etykieta">{temu(sygnal.utworzony)}</span>
         </div>
       </div>
+
+      {/* Sygnał wymuszony musi jasno mówić, czego mu zabrakło. */}
+      {sygnal.naZadanie && sygnal.brakiDoStandardu.length > 0 && (
+        <div className="mb-3 rounded-2xl bg-[#F7931A]/8 p-3">
+          <p className="mb-1 text-[11.5px] font-semibold" style={{ color: 'var(--zloto)' }}>
+            Ten sygnał nie powstałby sam
+          </p>
+          <ul className="space-y-0.5">
+            {sygnal.brakiDoStandardu.map((b, i) => (
+              <li key={i} className="text-[11.5px] leading-snug" style={{ color: 'var(--tekst-2)' }}>
+                • {b}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Kierunek + pewność */}
       <div className="mb-4 flex items-center gap-3">
@@ -366,11 +489,17 @@ export function KartaAnalizy({
   cenaBiezaca,
   rozwinieta,
   naKlik,
+  wskazania,
+  naDajSygnal,
+  liczySygnal,
 }: {
   analiza: WynikAnalizy
   cenaBiezaca: number | null
   rozwinieta?: boolean
   naKlik?: () => void
+  wskazania?: { czas: number; wynik: number }[]
+  naDajSygnal?: () => void
+  liczySygnal?: boolean
 }) {
   if (czySygnal(analiza)) {
     return (
@@ -382,7 +511,14 @@ export function KartaAnalizy({
       />
     )
   }
-  return <KartaCzekaj analiza={analiza} />
+  return (
+    <KartaCzekaj
+      analiza={analiza}
+      wskazania={wskazania}
+      naDajSygnal={naDajSygnal}
+      liczySygnal={liczySygnal}
+    />
+  )
 }
 
 /** Kompaktowy wiersz historii. */
