@@ -110,4 +110,83 @@ if (existsSync(buildGradle) && wersja && Number.isFinite(numerBudowania) && nume
   console.log('Brak WERSJA_APLIKACJI / NUMER_BUDOWANIA – zostawiam wersję z szablonu.')
 }
 
+// ------------------------------------------------------------------ aktualizator
+
+/**
+ * Natywny moduł aktualizatora i zmieniona MainActivity. Źródła leżą w repo
+ * w `natywne/android/` – tu tylko kopiujemy je do generowanego projektu.
+ */
+const PAKIET = join(KORZEN, 'android', 'app', 'src', 'main', 'java', 'pl', 'btcsygnaly', 'app')
+const ZRODLA_NATYWNE = join(KORZEN, 'natywne', 'android')
+if (existsSync(PAKIET) && existsSync(ZRODLA_NATYWNE)) {
+  for (const plik of ['AktualizatorPlugin.java', 'MainActivity.java']) {
+    writeFileSync(join(PAKIET, plik), readFileSync(join(ZRODLA_NATYWNE, plik), 'utf8'), 'utf8')
+    console.log(`zapisano java/${plik}`)
+  }
+} else {
+  console.log('UWAGA: nie znaleziono pakietu pl.btcsygnaly.app – aktualizator nie zostanie dodany')
+}
+
+// Uprawnienie do uruchamiania instalatora pobranego APK.
+const manifest = join(KORZEN, 'android', 'app', 'src', 'main', 'AndroidManifest.xml')
+if (existsSync(manifest)) {
+  let tresc = readFileSync(manifest, 'utf8')
+  const uprawnienie = '<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />'
+  if (!tresc.includes('REQUEST_INSTALL_PACKAGES')) {
+    tresc = tresc.replace(
+      /(<uses-permission android:name="android\.permission\.INTERNET" \/>)/,
+      `$1\n    ${uprawnienie}`,
+    )
+    if (!tresc.includes('REQUEST_INSTALL_PACKAGES')) {
+      // Szablon się zmienił – dopisujemy przed zamknięciem manifestu.
+      tresc = tresc.replace(/<\/manifest>\s*$/, `    ${uprawnienie}\n</manifest>\n`)
+    }
+    writeFileSync(manifest, tresc, 'utf8')
+    console.log('dopisano uprawnienie REQUEST_INSTALL_PACKAGES')
+  }
+}
+
+// ------------------------------------------------------------------ podpis
+
+/**
+ * Stały klucz podpisu.
+ *
+ * Bez tego każdy build w chmurze dostawał nowy, losowy klucz debug, a Android
+ * odmawia zainstalowania aktualizacji podpisanej innym kluczem niż wersja już
+ * zainstalowana („Nie zainstalowano aplikacji”). Sprawdzone: v1.0.5 i v1.0.6
+ * miały różne odciski SHA-256, więc aktualizacje nie mogły działać.
+ *
+ * Klucz przychodzi z sekretów repozytorium przez zmienne środowiskowe —
+ * hasła nie trafiają do pliku, tylko są czytane w chwili budowania.
+ */
+const MARKER_PODPISU = '// --- stały klucz podpisu (dostosuj-android.mjs) ---'
+if (existsSync(buildGradle) && process.env.KLUCZ_PLIK) {
+  let tresc = readFileSync(buildGradle, 'utf8')
+  if (!tresc.includes(MARKER_PODPISU)) {
+    // Drugi blok `android { }` – Gradle łączy go z pierwszym, więc nie trzeba
+    // przerabiać wygenerowanego pliku wyrażeniami regularnymi.
+    tresc += `
+${MARKER_PODPISU}
+android {
+    signingConfigs {
+        stabilny {
+            storeFile file(System.getenv("KLUCZ_PLIK"))
+            storePassword System.getenv("KLUCZ_HASLO")
+            keyAlias System.getenv("KLUCZ_ALIAS")
+            keyPassword System.getenv("KLUCZ_HASLO")
+        }
+    }
+    buildTypes {
+        debug { signingConfig signingConfigs.stabilny }
+        release { signingConfig signingConfigs.stabilny }
+    }
+}
+`
+    writeFileSync(buildGradle, tresc, 'utf8')
+    console.log('dopisano stały klucz podpisu do build.gradle')
+  }
+} else if (existsSync(buildGradle)) {
+  console.log('Brak KLUCZ_PLIK – build dostanie klucz debug z tego komputera.')
+}
+
 console.log('\nDostosowania Androida nałożone.')

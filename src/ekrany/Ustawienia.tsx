@@ -1,12 +1,9 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { PROFILE } from '@/analiza/profile'
-import {
-  sprawdzNaZadanie,
-  STRONA_WYDAN,
-  WERSJA,
-  type WynikSprawdzenia,
-} from '@/dane/aktualizacje'
+import { STRONA_WYDAN, WERSJA } from '@/dane/aktualizacje'
+import { NATYWNIE } from '@/lib/http'
+import { uzyjAktualizacji } from '@/stan/aktualizacja'
 import { wyczyscWszystko } from '@/dane/db'
 import { ZRODLA } from '@/dane/newsy/zrodla'
 import { GIELDY, stanZrodla, ustawGielde } from '@/dane/gieldy'
@@ -307,18 +304,40 @@ export function Ustawienia({ naZamknij }: { naZamknij: () => void }) {
 
 function SekcjaAktualizacji() {
   const sprawdzaj = uzyjUstawien((s) => s.sprawdzajAktualizacje)
+  const samodzielnie = uzyjUstawien((s) => s.pobierajAktualizacjeSamodzielnie)
   const ustaw = uzyjUstawien((s) => s.ustaw)
-  const [stan, ustawStan] = useState<WynikSprawdzenia | null>(null)
+  const { etap, aktualizacja, procent, komunikat, wbudowanyAktualizator, ostatnieSprawdzenie } =
+    uzyjAktualizacji()
   const [wToku, ustawWToku] = useState(false)
 
   const sprawdz = async () => {
     ustawWToku(true)
     try {
-      ustawStan(await sprawdzNaZadanie())
+      await uzyjAktualizacji.getState().sprawdz(true)
     } finally {
       ustawWToku(false)
     }
   }
+
+  const opisStanu = (() => {
+    if (!NATYWNIE) {
+      return 'Ta wersja aktualizuje się sama — wystarczy odświeżyć stronę, gdy pojawi się pasek.'
+    }
+    switch (etap) {
+      case 'dostepna':
+        return `Dostępna wersja ${aktualizacja?.wersja}.`
+      case 'pobieranie':
+        return `Pobieram ${aktualizacja?.wersja}: ${procent}%`
+      case 'gotowa':
+        return `Wersja ${aktualizacja?.wersja} pobrana – czeka na instalację.`
+      case 'wymagana-zgoda':
+        return 'Zezwól aplikacji na instalowanie aktualizacji (jednorazowo).'
+      case 'blad':
+        return komunikat ?? 'Nie udało się pobrać aktualizacji.'
+      default:
+        return ostatnieSprawdzenie ? 'Masz najnowszą wersję.' : null
+    }
+  })()
 
   return (
     <div className="karta p-4">
@@ -331,44 +350,57 @@ function SekcjaAktualizacji() {
 
       <button
         onClick={sprawdz}
-        disabled={wToku}
+        disabled={wToku || etap === 'pobieranie'}
         className="mb-2 w-full rounded-xl bg-white/6 py-2.5 text-[13px] font-semibold disabled:opacity-50"
       >
         {wToku ? 'Sprawdzam…' : 'Sprawdź aktualizacje'}
       </button>
 
-      {stan && (
+      {opisStanu && (
         <div
           className="mb-3 rounded-xl p-2.5"
           style={{
             background:
-              stan.stan === 'dostepna'
-                ? 'rgba(0,226,138,0.1)'
-                : stan.stan === 'blad'
-                  ? 'rgba(255,59,92,0.1)'
-                  : 'rgba(255,255,255,0.05)',
+              etap === 'blad'
+                ? 'rgba(255,59,92,0.1)'
+                : etap === 'brak'
+                  ? 'rgba(255,255,255,0.05)'
+                  : 'rgba(0,226,138,0.1)',
           }}
         >
-          <p
-            className="text-[12px] leading-relaxed"
-            style={{
-              color:
-                stan.stan === 'dostepna'
-                  ? 'var(--zielen)'
-                  : stan.stan === 'blad'
-                    ? 'var(--czerwien)'
-                    : 'var(--tekst-2)',
-            }}
-          >
-            {stan.komunikat}
+          <p className="text-[12px] leading-relaxed" style={{ color: 'var(--tekst-2)' }}>
+            {opisStanu}
           </p>
-          {stan.aktualizacja && (
+          {etap === 'pobieranie' && (
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/8">
+              <div className="h-full rounded-full bg-[var(--zielen)]" style={{ width: `${procent}%` }} />
+            </div>
+          )}
+          {(etap === 'dostepna' || etap === 'blad') && (
             <button
-              onClick={() => window.open(stan.aktualizacja!.linkApk, '_blank')}
+              onClick={() => void uzyjAktualizacji.getState().pobierz()}
               className="mt-2 w-full rounded-lg py-2 text-[12.5px] font-bold"
               style={{ background: 'var(--zielen)', color: '#050609' }}
             >
-              Pobierz {stan.aktualizacja.wersja}
+              Pobierz {aktualizacja?.wersja}
+            </button>
+          )}
+          {etap === 'gotowa' && (
+            <button
+              onClick={() => void uzyjAktualizacji.getState().zainstaluj()}
+              className="mt-2 w-full rounded-lg py-2 text-[12.5px] font-bold"
+              style={{ background: 'var(--zielen)', color: '#050609' }}
+            >
+              Zainstaluj {aktualizacja?.wersja}
+            </button>
+          )}
+          {etap === 'wymagana-zgoda' && (
+            <button
+              onClick={() => void uzyjAktualizacji.getState().zezwolNaInstalacje()}
+              className="mt-2 w-full rounded-lg py-2 text-[12.5px] font-bold"
+              style={{ background: 'var(--zloto)', color: '#050609' }}
+            >
+              Otwórz ustawienia zgody
             </button>
           )}
         </div>
@@ -377,24 +409,31 @@ function SekcjaAktualizacji() {
       <div className="-mx-1 border-t border-white/5 pt-1">
         <Przelacznik
           etykieta="Sprawdzaj automatycznie"
-          opis="raz przy starcie i co 6 godzin"
+          opis="przy starcie i co 6 godzin"
           wartosc={sprawdzaj}
           naZmiane={(v) => ustaw('sprawdzajAktualizacje', v)}
         />
+        {NATYWNIE && (
+          <Przelacznik
+            etykieta="Pobieraj same przez Wi-Fi"
+            opis={
+              wbudowanyAktualizator
+                ? 'nowa wersja ściąga się w tle, zostaje tylko „Zainstaluj”'
+                : 'zadziała od następnej wersji aplikacji'
+            }
+            wartosc={samodzielnie}
+            naZmiane={(v) => ustaw('pobierajAktualizacjeSamodzielnie', v)}
+          />
+        )}
       </div>
 
       <p className="mt-1 text-[10.5px] leading-relaxed" style={{ color: 'var(--tekst-3)' }}>
-        Aplikacja nie jest w sklepie Google Play, więc sama pilnuje wersji — sprawdza
-        wydania w repozytorium i proponuje pobranie nowszego pliku.{' '}
-        <a
-          href={STRONA_WYDAN}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{ color: 'var(--fiolet)' }}
-        >
-          Zobacz wszystkie wydania
+        Aplikacja nie jest w Google Play, więc sama pilnuje wersji i pobiera nowe wydania
+        z GitHuba. Samego zainstalowania Android nie pozwala pominąć — ostatnie „Zainstaluj”
+        zawsze potwierdza człowiek.{' '}
+        <a href={STRONA_WYDAN} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--fiolet)' }}>
+          Wszystkie wydania
         </a>
-        . Wersja przeglądarkowa i ta dodana do ekranu iPhone'a aktualizuje się sama.
       </p>
     </div>
   )

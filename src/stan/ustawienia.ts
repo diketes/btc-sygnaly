@@ -30,6 +30,8 @@ export interface Ustawienia {
   /** Wersja, o której użytkownik nie chce już słyszeć (zamknął pasek). */
   pominietaWersja: string
   sprawdzajAktualizacje: boolean
+  /** Pobieraj nowe wersje samodzielnie w tle – tylko przez Wi-Fi. */
+  pobierajAktualizacjeSamodzielnie: boolean
 }
 
 export const DOMYSLNE: Ustawienia = {
@@ -52,6 +54,7 @@ export const DOMYSLNE: Ustawienia = {
   wskaznikiWykresu: ['ema21', 'ema50', 'ema200', 'poziomy'],
   pominietaWersja: '',
   sprawdzajAktualizacje: true,
+  pobierajAktualizacjeSamodzielnie: true,
 }
 
 interface StanUstawien extends Ustawienia {

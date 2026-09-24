@@ -94,7 +94,24 @@ jobs:
       - name: Zsynchronizuj Capacitor
         run: npx cap sync android
 
-      - name: Nałóż dostosowania (motyw, kolory, wersja)
+      # Stały klucz z sekretów repozytorium. Bez niego build dostałby losowy
+      # klucz debug i Android odmówiłby zainstalowania aktualizacji na
+      # poprzednią wersję — dlatego brak sekretu przerywa build, zamiast
+      # po cichu wypuścić plik, którego nie da się zaktualizować.
+      - name: Przygotuj klucz podpisu
+        env:
+          KLUCZ_BASE64: ${{ secrets.KLUCZ_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KLUCZ_BASE64:-}" ]; then
+            echo "::error::Brak sekretu KLUCZ_BASE64 – bez stałego klucza aktualizacje nie zadziałają."
+            exit 1
+          fi
+          echo "$KLUCZ_BASE64" | base64 -d > "$RUNNER_TEMP/btc-sygnaly.jks"
+          echo "KLUCZ_PLIK=$RUNNER_TEMP/btc-sygnaly.jks" >> "$GITHUB_ENV"
+          echo "Klucz zapisany ($(stat -c %s "$RUNNER_TEMP/btc-sygnaly.jks") bajtów)."
+
+      - name: Nałóż dostosowania (motyw, wersja, aktualizator, podpis)
         env:
           WERSJA_APLIKACJI: v1.0.${{ github.run_number }}
           NUMER_BUDOWANIA: ${{ github.run_number }}
@@ -106,6 +123,9 @@ jobs:
 
       - name: Gradle – assembleDebug
         working-directory: android
+        env:
+          KLUCZ_HASLO: ${{ secrets.KLUCZ_HASLO }}
+          KLUCZ_ALIAS: ${{ secrets.KLUCZ_ALIAS }}
         run: |
           chmod +x ./gradlew
           ./gradlew assembleDebug --no-daemon --stacktrace
@@ -115,6 +135,23 @@ jobs:
           mkdir -p dist-apk
           cp android/app/build/outputs/apk/debug/app-debug.apk dist-apk/btc-sygnaly.apk
           ls -lh dist-apk/
+
+      # Strażnik: jeśli kiedykolwiek build zostałby podpisany innym kluczem,
+      # wydanie nie powstanie. Odcisk klucza nie jest tajny – to jego publiczna
+      # część, taka sama w każdym zainstalowanym egzemplarzu aplikacji.
+      - name: Sprawdź odcisk klucza podpisu
+        env:
+          OCZEKIWANY: 0C:E0:A4:12:20:0E:1A:28:47:E3:24:71:7C:37:EC:23:BC:6D:C0:14:59:55:D3:1C:A8:BC:9D:F8:65:F2:EC:01
+        run: |
+          set -euo pipefail
+          ODCISK="$(keytool -printcert -jarfile dist-apk/btc-sygnaly.apk | grep -m1 'SHA256:' | awk '{print $2}')"
+          echo "Odcisk APK:      $ODCISK"
+          echo "Oczekiwany:      $OCZEKIWANY"
+          if [ "$ODCISK" != "$OCZEKIWANY" ]; then
+            echo "::error::APK podpisany innym kluczem – aktualizacja nie zainstalowałaby się na telefonach."
+            exit 1
+          fi
+          echo "Podpis zgodny."
 
       - name: Wystaw APK jako artefakt
         uses: actions/upload-artifact@v4

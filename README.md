@@ -104,7 +104,7 @@ Wymagania: Node 20 lub nowszy.
 | `npm run backtest`         | backtest silnika na realnych danych z Binance                |
 | `npm run sprawdz`          | wszystkie kontrole naraz                                     |
 | `npm run sprawdz:app`      | klika przez aplikację w przeglądarce i robi zrzuty           |
-| `npm run test:czcionka`    | sprawdza aplikację przy powiększonej czcionce systemowej     |
+| `npm run test:cena`        | czy cena jest czytelna na słabym telefonie i przy dużej czcionce |
 | `npm run apk`              | buduje APK (wymaga JDK 17+ i Android SDK)                    |
 
 Backtest przyjmuje argumenty: `npm run backtest -- dlugi 4` (horyzont i liczba lat).
