@@ -7,9 +7,11 @@ dist-apk/
 dist-ipa/
 *.local
 
-# Platformy natywne – generowane przez Capacitor
-android/
-ios/
+# Platformy natywne – generowane przez Capacitor.
+# Ukośnik na początku jest ważny: bez niego wzorzec „android/” łapał też
+# `natywne/android/` ze źródłami aktualizatora i te nigdy nie trafiały do repo.
+/android/
+/ios/
 
 # Wyniki testów i diagnostyki
 zrzuty/

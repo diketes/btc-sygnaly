@@ -118,13 +118,29 @@ if (existsSync(buildGradle) && wersja && Number.isFinite(numerBudowania) && nume
  */
 const PAKIET = join(KORZEN, 'android', 'app', 'src', 'main', 'java', 'pl', 'btcsygnaly', 'app')
 const ZRODLA_NATYWNE = join(KORZEN, 'natywne', 'android')
-if (existsSync(PAKIET) && existsSync(ZRODLA_NATYWNE)) {
-  for (const plik of ['AktualizatorPlugin.java', 'MainActivity.java']) {
+const PLIKI_NATYWNE = ['AktualizatorPlugin.java', 'MainActivity.java']
+
+// W CI brak aktualizatora ma przerwać build – wcześniej brak źródeł kończył się
+// tylko ostrzeżeniem i wyszło wydanie bez aktualizatora, czego nikt nie zauważył.
+const wymagany = process.env.WYMAGAJ_AKTUALIZATORA === '1'
+const brakuje = [
+  ...(existsSync(PAKIET) ? [] : [`katalogu pakietu ${PAKIET}`]),
+  ...PLIKI_NATYWNE.filter((p) => !existsSync(join(ZRODLA_NATYWNE, p))).map(
+    (p) => `źródła natywne/android/${p} (czy nie jest w .gitignore?)`,
+  ),
+]
+
+if (brakuje.length === 0) {
+  for (const plik of PLIKI_NATYWNE) {
     writeFileSync(join(PAKIET, plik), readFileSync(join(ZRODLA_NATYWNE, plik), 'utf8'), 'utf8')
     console.log(`zapisano java/${plik}`)
   }
 } else {
-  console.log('UWAGA: nie znaleziono pakietu pl.btcsygnaly.app – aktualizator nie zostanie dodany')
+  console.log(`UWAGA: aktualizator nie zostanie dodany – brakuje: ${brakuje.join('; ')}`)
+  if (wymagany) {
+    console.error('Przerywam: WYMAGAJ_AKTUALIZATORA=1, a wydanie bez aktualizatora nie może powstać.')
+    process.exit(1)
+  }
 }
 
 // Uprawnienie do uruchamiania instalatora pobranego APK.

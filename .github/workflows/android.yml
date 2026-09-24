@@ -115,6 +115,8 @@ jobs:
         env:
           WERSJA_APLIKACJI: v1.0.${{ github.run_number }}
           NUMER_BUDOWANIA: ${{ github.run_number }}
+          # Bez aktualizatora build ma się wywalić, a nie po cichu go pominąć.
+          WYMAGAJ_AKTUALIZATORA: '1'
         run: node scripts/dostosuj-android.mjs
 
       - name: Ikony Androida
@@ -152,6 +154,23 @@ jobs:
             exit 1
           fi
           echo "Podpis zgodny."
+
+      # Drugi strażnik: moduł aktualizatora musi być skompilowany w APK.
+      # v1.0.7 wyszła bez niego, bo .gitignore połknął źródła Javy – build
+      # przeszedł na zielono i nikt by tego nie zauważył.
+      - name: Sprawdź, czy aktualizator jest w APK
+        run: |
+          set -euo pipefail
+          TRAFIEN=0
+          for DEX in $(unzip -Z1 dist-apk/btc-sygnaly.apk | grep -E '^classes[0-9]*\.dex$'); do
+            N=$(unzip -p dist-apk/btc-sygnaly.apk "$DEX" | LC_ALL=C grep -a -c 'AktualizatorPlugin' || true)
+            TRAFIEN=$((TRAFIEN + N))
+          done
+          if [ "$TRAFIEN" -eq 0 ]; then
+            echo "::error::Brak klasy AktualizatorPlugin w APK – aplikacja nie umiałaby się aktualizować."
+            exit 1
+          fi
+          echo "Aktualizator obecny w APK."
 
       - name: Wystaw APK jako artefakt
         uses: actions/upload-artifact@v4
