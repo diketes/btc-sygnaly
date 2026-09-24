@@ -8,10 +8,16 @@
  */
 
 import { create } from 'zustand'
-import { czyAktywny, zaktualizujWszystkie } from '@/analiza/cykl'
-import { HORYZONTY, horyzontyDlaTrybu, type Horyzont, type TrybHoryzontu } from '@/analiza/profile'
+import { biezacyWynikR, czekaNaWejscie, czyAktywny, zaktualizujWszystkie } from '@/analiza/cykl'
+import { HORYZONTY, horyzontyDlaTrybu, opisDni, type Horyzont, type TrybHoryzontu } from '@/analiza/profile'
 import { policzStatystyki, type Statystyki, PUSTE_STATYSTYKI } from '@/analiza/statystyki'
-import { czySygnal, type KontekstRynku, type Sygnal, type WynikAnalizy } from '@/analiza/typy'
+import {
+  czySygnal,
+  czyZGeneratora,
+  type KontekstRynku,
+  type Sygnal,
+  type WynikAnalizy,
+} from '@/analiza/typy'
 import { policzAnalize } from '@/analiza/workerKlient'
 import { usunSygnaly, wczytajSygnaly, zapiszSygnal, zapiszSygnaly } from '@/dane/db'
 import { drgnij, drgnijBlad, drgnijSukces, powiadom } from '@/lib/powiadomienia'
@@ -32,6 +38,8 @@ interface StanSygnalow {
   statystyki: Statystyki
   /** Skuteczność sygnałów wymuszonych przyciskiem „Daj sygnał”, osobno. */
   statystykiNaZadanie: Statystyki
+  /** Skuteczność śledzonych sygnałów z generatora (własna liczba dni), osobno. */
+  statystykiGeneratora: Statystyki
   /** Ostatnie wskazania silnika – pokazywane jako mini-wykres. */
   wskazania: Partial<Record<Horyzont, PunktWskazania[]>>
   liczenie: boolean
@@ -45,6 +53,14 @@ interface StanSygnalow {
   przelicz: (tryb: TrybHoryzontu, kontekst: KontekstRynku) => Promise<void>
   dajSygnal: (horyzont: Horyzont, kontekst: KontekstRynku) => Promise<void>
   sprawdzCeny: (cena: number) => Promise<void>
+  /**
+   * Bierze sygnał z generatora pod obserwację: TP/SL pilnowane jak przy
+   * zwykłych sygnałach, z powiadomieniami. Śledzony jest jeden naraz –
+   * poprzedni zostaje zamknięty po bieżącej cenie.
+   */
+  sledz: (sygnal: Sygnal) => Promise<void>
+  /** Kończy śledzenie sygnału z generatora – zamknięcie po bieżącej cenie. */
+  zakonczSledzenie: (id: string) => Promise<void>
   wyczyscSwiezy: () => void
   wyczyscHistorie: () => Promise<void>
 }
@@ -53,22 +69,66 @@ interface StanSygnalow {
 const MAKS_WSKAZAN = 240
 
 /**
- * Statystyki liczone osobno dla sygnałów własnych silnika i dla wymuszonych
- * przyciskiem. Mieszanie ich zniekształcałoby obraz skuteczności: sygnały
- * na żądanie z założenia nie przeszły progów, więc wypadają słabiej.
+ * Statystyki liczone osobno dla sygnałów własnych silnika, wymuszonych
+ * przyciskiem i z generatora. Mieszanie ich zniekształcałoby obraz
+ * skuteczności: sygnały na żądanie z założenia nie przeszły progów, a te
+ * z generatora grają na zupełnie innych horyzontach.
  */
 function przeliczStatystyki(
   historia: Sygnal[],
   aktywne: Sygnal[],
   ryzyko: number,
-): { zwykle: Statystyki; naZadanie: Statystyki } {
-  const wszystkie = [...historia, ...aktywne]
-  const zwykle = wszystkie.filter((s) => !s.naZadanie)
-  const naZadanie = wszystkie.filter((s) => s.naZadanie)
-  return {
-    zwykle: zwykle.length > 0 ? policzStatystyki(zwykle, ryzyko) : PUSTE_STATYSTYKI,
-    naZadanie: naZadanie.length > 0 ? policzStatystyki(naZadanie, ryzyko) : PUSTE_STATYSTYKI,
+): Pick<StanSygnalow, 'statystyki' | 'statystykiNaZadanie' | 'statystykiGeneratora'> {
+  const zwykle: Sygnal[] = []
+  const naZadanie: Sygnal[] = []
+  const generator: Sygnal[] = []
+  for (const s of [...historia, ...aktywne]) {
+    if (czyZGeneratora(s)) generator.push(s)
+    else if (s.naZadanie) naZadanie.push(s)
+    else zwykle.push(s)
   }
+  const licz = (lista: Sygnal[]) => (lista.length > 0 ? policzStatystyki(lista, ryzyko) : PUSTE_STATYSTYKI)
+  return {
+    statystyki: licz(zwykle),
+    statystykiNaZadanie: licz(naZadanie),
+    statystykiGeneratora: licz(generator),
+  }
+}
+
+/**
+ * Zamyka sygnał po bieżącej cenie – gdy zastępuje go nowy albo użytkownik
+ * kończy śledzenie. Wynik liczony tak samo jak przy wygaśnięciu, więc
+ * porzucenie przegrywającej pozycji nie wymazuje jej ze statystyk.
+ */
+function zamknijPoCenie(s: Sygnal, cena: number, opis: string, teraz = Date.now()): Sygnal {
+  // Zlecenie limit, które nie weszło, nie ma wyniku – pozycji nigdy nie było.
+  if (czekaNaWejscie(s)) {
+    return {
+      ...s,
+      status: 'uniewazniony',
+      zamkniety: teraz,
+      wynikR: null,
+      zdarzenia: [
+        ...s.zdarzenia,
+        { czas: teraz, typ: 'uniewazniony', cena, opis: `${opis} Zlecenie nie weszło – bez wyniku.` },
+      ],
+    }
+  }
+  const osiagniety = [...s.cele].reverse().find((c) => c.osiagniety)
+  const wynikR = osiagniety ? osiagniety.r : Math.max(-1, biezacyWynikR(s, cena))
+  return {
+    ...s,
+    status: 'uniewazniony',
+    zamkniety: teraz,
+    wynikR,
+    zdarzenia: [...s.zdarzenia, { czas: teraz, typ: 'uniewazniony', cena, opis }],
+  }
+}
+
+/** Nazwa sygnału do powiadomień: „krótki termin”, „generator · 2 tygodnie”. */
+export function nazwaSygnalu(s: Sygnal): string {
+  if (czyZGeneratora(s)) return `generator · ${opisDni(s.dniHoryzontu!)}`
+  return s.horyzont === 'krotki' ? 'krótki termin' : 'długi termin'
 }
 
 export const uzyjSygnalow = create<StanSygnalow>((set, get) => ({
@@ -77,6 +137,7 @@ export const uzyjSygnalow = create<StanSygnalow>((set, get) => ({
   historia: [],
   statystyki: PUSTE_STATYSTYKI,
   statystykiNaZadanie: PUSTE_STATYSTYKI,
+  statystykiGeneratora: PUSTE_STATYSTYKI,
   wskazania: {},
   liczenie: false,
   liczenieNaZadanie: null,
@@ -87,8 +148,7 @@ export const uzyjSygnalow = create<StanSygnalow>((set, get) => ({
     const wszystkie = await wczytajSygnaly()
     const aktywne = wszystkie.filter(czyAktywny)
     const historia = wszystkie.filter((s) => !czyAktywny(s))
-    const st = przeliczStatystyki(historia, aktywne, uzyjUstawien.getState().ryzykoProc)
-    set({ aktywne, historia, statystyki: st.zwykle, statystykiNaZadanie: st.naZadanie })
+    set({ aktywne, historia, ...przeliczStatystyki(historia, aktywne, uzyjUstawien.getState().ryzykoProc) })
   },
 
   /**
@@ -108,17 +168,23 @@ export const uzyjSygnalow = create<StanSygnalow>((set, get) => ({
       if (!analiza || !czySygnal(analiza)) return
 
       // Zastępujemy ewentualny poprzedni sygnał na żądanie tego horyzontu –
-      // nie ma sensu trzymać kilku wymuszonych naraz.
-      const bezStarych = get().aktywne.filter((s) => !(s.naZadanie && s.horyzont === horyzont))
-      set({ aktywne: [...bezStarych, analiza], swiezySygnal: analiza })
-      await zapiszSygnal(analiza)
+      // nie ma sensu trzymać kilku wymuszonych naraz. Stary jest zamykany
+      // (a nie tylko chowany), inaczej wróciłby z bazy po restarcie.
+      const doZastapienia = (s: Sygnal) => s.naZadanie && !czyZGeneratora(s) && s.horyzont === horyzont
+      const cena = uzyjRynku.getState().cena
+      const zastapione = get()
+        .aktywne.filter(doZastapienia)
+        .map((s) => zamknijPoCenie(s, cena ?? s.cenaOdniesienia, 'Zastąpiony nowym sygnałem na żądanie.'))
+      set((s) => ({
+        aktywne: [...s.aktywne.filter((x) => !doZastapienia(x)), analiza],
+        historia: [...zastapione, ...s.historia].sort((a, b) => b.utworzony - a.utworzony),
+        swiezySygnal: analiza,
+      }))
+      await zapiszSygnaly([...zastapione, analiza])
       void drgnij('mocno')
 
       const ustawienia = uzyjUstawien.getState()
-      set((s) => {
-        const st = przeliczStatystyki(s.historia, s.aktywne, ustawienia.ryzykoProc)
-        return { statystyki: st.zwykle, statystykiNaZadanie: st.naZadanie }
-      })
+      set((s) => przeliczStatystyki(s.historia, s.aktywne, ustawienia.ryzykoProc))
     } finally {
       set({ liczenieNaZadanie: null })
     }
@@ -135,11 +201,14 @@ export const uzyjSygnalow = create<StanSygnalow>((set, get) => ({
       const aktywne = get().aktywne
 
       // Cooldown liczymy od ostatniego sygnału danego horyzontu – także zamkniętego.
+      // Sygnały z generatora żyją na własnej osi dni i nie wstrzymują kart
+      // „krótki/długi”.
       const poprzednie: Partial<
         Record<Horyzont, { kierunek: 'long' | 'short'; utworzony: number } | null>
       > = {}
+      const stale = [...get().historia, ...aktywne].filter((s) => !czyZGeneratora(s))
       for (const h of HORYZONTY) {
-        const ostatni = [...get().historia, ...aktywne]
+        const ostatni = stale
           .filter((s) => s.horyzont === h)
           .sort((a, b) => b.utworzony - a.utworzony)[0]
         poprzednie[h] = ostatni ? { kierunek: ostatni.kierunek, utworzony: ostatni.utworzony } : null
@@ -167,7 +236,7 @@ export const uzyjSygnalow = create<StanSygnalow>((set, get) => ({
       for (const h of horyzonty) {
         const analiza = wynik[h]
         if (!analiza || !czySygnal(analiza)) continue
-        if (aktywne.some((s) => s.horyzont === h)) continue
+        if (aktywne.some((s) => s.horyzont === h && !czyZGeneratora(s))) continue
 
         const sygnal = analiza
         set((s) => ({ aktywne: [...s.aktywne, sygnal], swiezySygnal: sygnal }))
@@ -180,9 +249,7 @@ export const uzyjSygnalow = create<StanSygnalow>((set, get) => ({
           poraNaPowiadomienie(ustawienia)
         ) {
           void powiadom({
-            tytul: `${sygnal.kierunek === 'long' ? '🟢 LONG' : '🔴 SHORT'} · ${
-              sygnal.horyzont === 'krotki' ? 'krótki termin' : 'długi termin'
-            }`,
+            tytul: `${sygnal.kierunek === 'long' ? '🟢 LONG' : '🔴 SHORT'} · ${nazwaSygnalu(sygnal)}`,
             tresc:
               `Wejście ${Math.round(sygnal.wejscie)} · SL ${Math.round(sygnal.stopLoss)} · ` +
               `TP1 ${Math.round(sygnal.cele[0].cena)} · pewność ${sygnal.pewnosc}%`,
@@ -191,13 +258,45 @@ export const uzyjSygnalow = create<StanSygnalow>((set, get) => ({
         }
       }
 
-      set((s) => {
-        const st = przeliczStatystyki(s.historia, s.aktywne, ustawienia.ryzykoProc)
-        return { statystyki: st.zwykle, statystykiNaZadanie: st.naZadanie }
-      })
+      set((s) => przeliczStatystyki(s.historia, s.aktywne, ustawienia.ryzykoProc))
     } finally {
       set({ liczenie: false })
     }
+  },
+
+  async sledz(sygnal) {
+    if (!czyZGeneratora(sygnal) || get().aktywne.some((s) => s.id === sygnal.id)) return
+    const cena = uzyjRynku.getState().cena
+    const zastapione = get()
+      .aktywne.filter(czyZGeneratora)
+      .map((s) =>
+        zamknijPoCenie(
+          s,
+          cena ?? s.cenaOdniesienia,
+          'Zastąpiony nowym sygnałem z generatora – zamknięty po bieżącej cenie.',
+        ),
+      )
+    set((s) => ({
+      aktywne: [...s.aktywne.filter((x) => !czyZGeneratora(x)), sygnal],
+      historia: [...zastapione, ...s.historia].sort((a, b) => b.utworzony - a.utworzony),
+      swiezySygnal: sygnal,
+    }))
+    await zapiszSygnaly([...zastapione, sygnal])
+    void drgnij('mocno')
+    set((s) => przeliczStatystyki(s.historia, s.aktywne, uzyjUstawien.getState().ryzykoProc))
+  },
+
+  async zakonczSledzenie(id) {
+    const sygnal = get().aktywne.find((s) => s.id === id)
+    if (!sygnal || !czyZGeneratora(sygnal)) return
+    const cena = uzyjRynku.getState().cena ?? sygnal.cenaOdniesienia
+    const zamkniety = zamknijPoCenie(sygnal, cena, 'Śledzenie zakończone ręcznie – zamknięty po bieżącej cenie.')
+    set((s) => ({
+      aktywne: s.aktywne.filter((x) => x.id !== id),
+      historia: [zamkniety, ...s.historia].sort((a, b) => b.utworzony - a.utworzony),
+    }))
+    await zapiszSygnal(zamkniety)
+    set((s) => przeliczStatystyki(s.historia, s.aktywne, uzyjUstawien.getState().ryzykoProc))
   },
 
   async sprawdzCeny(cena) {
@@ -210,7 +309,7 @@ export const uzyjSygnalow = create<StanSygnalow>((set, get) => ({
     const ustawieniaCeny = uzyjUstawien.getState()
     const doOznaczenia: Sygnal[] = []
     for (const s of aktywne) {
-      if (s.powiadomionoOWejsciu) continue
+      if (s.powiadomionoOWejsciu || s.wypelniony) continue
       const limit = Math.abs(s.wejscie - s.cenaOdniesienia) > 1e-9
       if (!limit) continue
       const odlegloscProc = (Math.abs(cena - s.wejscie) / s.wejscie) * 100
@@ -252,12 +351,12 @@ export const uzyjSygnalow = create<StanSygnalow>((set, get) => ({
         const sukces = z.typ === 'tp1' || z.typ === 'tp2' || z.typ === 'tp3'
         if (sukces) void drgnijSukces()
         else if (z.typ === 'sl') void drgnijBlad()
+        else if (z.typ === 'wejscie') void drgnij('srednio')
+        const ikona = sukces ? '🎯' : z.typ === 'sl' ? '🛑' : z.typ === 'wejscie' ? '✅' : '⌛'
 
         if (ustawienia.powiadomieniaCele && poraNaPowiadomienie(ustawienia)) {
           void powiadom({
-            tytul: `${sukces ? '🎯' : '🛑'} ${sygnal.kierunek.toUpperCase()} · ${
-              sygnal.horyzont === 'krotki' ? 'krótki termin' : 'długi termin'
-            }`,
+            tytul: `${ikona} ${sygnal.kierunek.toUpperCase()} · ${nazwaSygnalu(sygnal)}`,
             tresc: z.opis,
             tag: `cel-${sygnal.id}`,
           })
@@ -265,10 +364,7 @@ export const uzyjSygnalow = create<StanSygnalow>((set, get) => ({
       }
     }
 
-    set((s) => {
-      const st = przeliczStatystyki(s.historia, s.aktywne, ustawienia.ryzykoProc)
-      return { statystyki: st.zwykle, statystykiNaZadanie: st.naZadanie }
-    })
+    set((s) => przeliczStatystyki(s.historia, s.aktywne, ustawienia.ryzykoProc))
   },
 
   wyczyscSwiezy() {
@@ -282,13 +378,19 @@ export const uzyjSygnalow = create<StanSygnalow>((set, get) => ({
       historia: [],
       statystyki: PUSTE_STATYSTYKI,
       statystykiNaZadanie: PUSTE_STATYSTYKI,
+      statystykiGeneratora: PUSTE_STATYSTYKI,
       wskazania: {},
       analizy: {},
     })
   },
 }))
 
-/** Aktywny sygnał danego horyzontu (lub null). */
+/** Aktywny sygnał stałego horyzontu (lub null) – bez sygnałów z generatora. */
 export function aktywnyDlaHoryzontu(lista: readonly Sygnal[], h: Horyzont): Sygnal | null {
-  return lista.find((s) => s.horyzont === h) ?? null
+  return lista.find((s) => s.horyzont === h && !czyZGeneratora(s)) ?? null
+}
+
+/** Śledzony sygnał z generatora (lub null). */
+export function aktywnyZGeneratora(lista: readonly Sygnal[]): Sygnal | null {
+  return lista.find(czyZGeneratora) ?? null
 }

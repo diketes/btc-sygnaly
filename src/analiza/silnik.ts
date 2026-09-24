@@ -525,12 +525,17 @@ export interface WejscieAnalizy {
    * `naZadanie: true` i listę tego, czego mu zabrakło.
    */
   naZadanie?: boolean
+  /**
+   * Profil zbudowany z liczby dni (generator sygnału). Zastępuje stały profil
+   * horyzontu – interwały, stop, cele i ważność idą wtedy z tego profilu.
+   */
+  profilWlasny?: ProfilHoryzontu
 }
 
 export function analizuj(wejscie: WejscieAnalizy): WynikAnalizy {
   const { horyzont, swieceWg } = wejscie
   const kontekst = wejscie.kontekst ?? PUSTY_KONTEKST
-  const p = profil(horyzont)
+  const p = wejscie.profilWlasny ?? profil(horyzont)
   const teraz = wejscie.teraz ?? Date.now()
 
   const oceny: OcenaInterwalu[] = []
@@ -632,7 +637,7 @@ export function analizuj(wejscie: WejscieAnalizy): WynikAnalizy {
   })
 
   // Stop loss: ostatni istotny swing po stronie ryzyka, powiększony o bufor ATR.
-  const okno = swieceBazowe.slice(-40)
+  const okno = swieceBazowe.slice(-(p.oknoSwingu ?? 40))
   const swingDol = Math.min(...okno.map((s) => s.l))
   const swingGora = Math.max(...okno.map((s) => s.h))
   const bufor = wartoscAtr * p.mnoznikSL
@@ -763,7 +768,7 @@ export function analizuj(wejscie: WejscieAnalizy): WynikAnalizy {
   }
 
   const sygnal: Sygnal = {
-    id: `${horyzont}-${kierunek}-${naZadanie ? 'zad-' : ''}${teraz}`,
+    id: `${horyzont}-${kierunek}-${p.dniWlasne ? `gen${p.dniWlasne}-` : naZadanie ? 'zad-' : ''}${teraz}`,
     horyzont,
     kierunek,
     utworzony: teraz,
@@ -771,6 +776,7 @@ export function analizuj(wejscie: WejscieAnalizy): WynikAnalizy {
     wejscie: cenaWejscia,
     zakresWejscia,
     typWejscia,
+    wypelniony: !retest,
     stopLoss,
     odlegloscSlProc,
     cele,
@@ -795,15 +801,18 @@ export function analizuj(wejscie: WejscieAnalizy): WynikAnalizy {
         czas: teraz,
         typ: 'utworzony',
         cena: cenaOdniesienia,
-        opis: naZadanie
-          ? `Sygnał ${kierunek.toUpperCase()} (${p.nazwa.toLowerCase()}) pokazany na żądanie przy ${cenaOdniesienia.toFixed(0)} USDT.`
-          : `Sygnał ${kierunek.toUpperCase()} (${p.nazwa.toLowerCase()}) wystawiony przy ${cenaOdniesienia.toFixed(0)} USDT.`,
+        opis: p.dniWlasne
+          ? `Sygnał ${kierunek.toUpperCase()} z generatora (${p.podtytul}) przy ${cenaOdniesienia.toFixed(0)} USDT.`
+          : naZadanie
+            ? `Sygnał ${kierunek.toUpperCase()} (${p.nazwa.toLowerCase()}) pokazany na żądanie przy ${cenaOdniesienia.toFixed(0)} USDT.`
+            : `Sygnał ${kierunek.toUpperCase()} (${p.nazwa.toLowerCase()}) wystawiony przy ${cenaOdniesienia.toFixed(0)} USDT.`,
       },
     ],
     wynikR: null,
     zamkniety: null,
     naZadanie,
     brakiDoStandardu,
+    ...(p.dniWlasne ? { dniHoryzontu: p.dniWlasne } : {}),
   }
 
   return sygnal

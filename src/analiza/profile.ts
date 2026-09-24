@@ -81,6 +81,14 @@ export interface ProfilHoryzontu {
   /** Po ilu godzinach niezrealizowany sygnał wygasa. */
   waznoscGodzin: number
   kolorAkcentu: string
+  /**
+   * Z ilu ostatnich świec bazowych brać swing pod stop loss (domyślnie 40).
+   * Przy krótkim własnym horyzoncie 40 świec dziennych to ponad miesiąc –
+   * stop wypadałby dużo dalej, niż ma sens przy kilkudniowej pozycji.
+   */
+  oknoSwingu?: number
+  /** Liczba dni – tylko profil zbudowany w generatorze (`profilDlaDni`). */
+  dniWlasne?: number
 }
 
 const PROFIL_KROTKI: ProfilHoryzontu = {
@@ -212,4 +220,178 @@ export function potrzebneInterwaly(tryb: TrybHoryzontu): Interwal[] {
 
 export function nazwaHoryzontu(h: Horyzont): string {
   return PROFILE[h].nazwa
+}
+
+// ------------------------------------------------------------------ własny horyzont
+
+/**
+ * Profil na dowolną liczbę dni – dla generatora sygnału („od 2 dni do 3 miesięcy”).
+ *
+ * Dwa stałe profile to dwa punkty na osi czasu: krótki (do ~2 dni) i długi
+ * (2 tygodnie – 3 miesiące). Tutaj budujemy profil pomiędzy nimi i poza nimi,
+ * tak żeby sygnał na 3 dni był naprawdę innym sygnałem niż na 60 dni:
+ *
+ *  • interwały i interwał bazowy dobierane progami – im dłuższy horyzont, tym
+ *    wyższe interwały (krótkie świece to przy trzymiesięcznej pozycji szum),
+ *  • stop, cele, wymagany stosunek zysku do ryzyka, wagi wskaźników i wpływ
+ *    danych z rynku terminowego przechodzą płynnie od profilu krótkiego do
+ *    długiego wraz z logarytmem liczby dni,
+ *  • sygnał żyje dokładnie tyle dni, ile wybrał użytkownik.
+ */
+
+export const MIN_DNI = 2
+export const MAX_DNI = 90
+
+/** Położenie na osi 2…90 dni w skali logarytmicznej: 0 = 2 dni, 1 = 90 dni. */
+export function polozenieHoryzontu(dni: number): number {
+  const d = Math.min(MAX_DNI, Math.max(MIN_DNI, dni))
+  return Math.log(d / MIN_DNI) / Math.log(MAX_DNI / MIN_DNI)
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t
+}
+
+/** Opis liczby dni po ludzku: „tydzień”, „2 tygodnie”, „miesiąc”, „45 dni”. */
+export function opisDni(dni: number): string {
+  const d = Math.round(dni)
+  const nazwy: Record<number, string> = {
+    7: 'tydzień',
+    14: '2 tygodnie',
+    21: '3 tygodnie',
+    30: 'miesiąc',
+    60: '2 miesiące',
+    90: '3 miesiące',
+  }
+  return nazwy[d] ?? `${d} dni`
+}
+
+/** To samo w dopełniaczu – po „do” i „dla”: „do tygodnia”, „dla 3 miesięcy”. */
+export function opisDniDopelniacz(dni: number): string {
+  const d = Math.round(dni)
+  const nazwy: Record<number, string> = {
+    7: 'tygodnia',
+    14: '2 tygodni',
+    21: '3 tygodni',
+    30: 'miesiąca',
+    60: '2 miesięcy',
+    90: '3 miesięcy',
+  }
+  return nazwy[d] ?? `${d} dni`
+}
+
+/** Nazwa horyzontu sygnału: „Krótki termin” albo „Generator · 2 tygodnie”. */
+export function etykietaHoryzontu(s: { horyzont: Horyzont; dniHoryzontu?: number }): string {
+  return typeof s.dniHoryzontu === 'number'
+    ? `Generator · ${opisDni(s.dniHoryzontu)}`
+    : PROFILE[s.horyzont].nazwa
+}
+
+type WpisInterwalu = { interwal: Interwal; waga: number }
+
+function interwalyDlaDni(dni: number): { interwaly: WpisInterwalu[]; bazowy: Interwal } {
+  if (dni <= 3) {
+    return {
+      bazowy: '1h',
+      interwaly: [
+        { interwal: '15m', waga: 0.15 },
+        { interwal: '1h', waga: 0.35 },
+        { interwal: '4h', waga: 0.35 },
+        { interwal: '1d', waga: 0.15 },
+      ],
+    }
+  }
+  if (dni <= 10) {
+    return {
+      bazowy: '4h',
+      interwaly: [
+        { interwal: '1h', waga: 0.15 },
+        { interwal: '4h', waga: 0.4 },
+        { interwal: '1d', waga: 0.35 },
+        { interwal: '3d', waga: 0.1 },
+      ],
+    }
+  }
+  if (dni <= 30) {
+    return {
+      bazowy: '1d',
+      interwaly: [
+        { interwal: '4h', waga: 0.25 },
+        { interwal: '1d', waga: 0.45 },
+        { interwal: '3d', waga: 0.2 },
+        { interwal: '1w', waga: 0.1 },
+      ],
+    }
+  }
+  return {
+    bazowy: '1d',
+    interwaly: [
+      { interwal: '4h', waga: 0.15 },
+      { interwal: '1d', waga: 0.4 },
+      { interwal: '3d', waga: 0.25 },
+      { interwal: '1w', waga: 0.2 },
+    ],
+  }
+}
+
+export function profilDlaDni(dniWejscie: number): ProfilHoryzontu {
+  const dni = Math.round(Math.min(MAX_DNI, Math.max(MIN_DNI, dniWejscie)))
+  const t = polozenieHoryzontu(dni)
+  const k = PROFIL_KROTKI
+  const d = PROFIL_DLUGI
+  const { interwaly, bazowy } = interwalyDlaDni(dni)
+
+  const wagiWskaznikow = Object.fromEntries(
+    (Object.keys(k.wagiWskaznikow) as (keyof WagiWskaznikow)[]).map((klucz) => [
+      klucz,
+      lerp(k.wagiWskaznikow[klucz], d.wagiWskaznikow[klucz], t),
+    ]),
+  ) as unknown as WagiWskaznikow
+
+  const wagiModyfikatorow = Object.fromEntries(
+    (Object.keys(k.wagiModyfikatorow) as (keyof WagiModyfikatorow)[]).map((klucz) => [
+      klucz,
+      lerp(k.wagiModyfikatorow[klucz], d.wagiModyfikatorow[klucz], t),
+    ]),
+  ) as unknown as WagiModyfikatorow
+
+  // Swing pod stop: ok. 60% długości horyzontu w świecach bazowych, 10–40 świec.
+  const godzinBazowego = MS_INTERWALU[bazowy] / 3_600_000
+  const oknoSwingu = Math.round(Math.min(40, Math.max(10, ((dni * 24) / godzinBazowego) * 0.6)))
+
+  // toFixed zdejmuje ogony w rodzaju 2,0500000000000003 z mnożenia przez krok.
+  const zaokr = (x: number, krok: number) => Number((Math.round(x / krok) * krok).toFixed(4))
+
+  return {
+    // Najbliższy stały profil – do grupowania; generator i tak rozpoznaje
+    // swoje sygnały po `dniHoryzontu`.
+    id: dni <= 10 ? 'krotki' : 'dlugi',
+    nazwa: 'Własny horyzont',
+    podtytul: opisDni(dni),
+    opisDlugosci: `do ${opisDniDopelniacz(dni)}`,
+    ikona: 'suwak',
+    interwaly,
+    interwalBazowy: bazowy,
+    swiecDoAnalizy: 500,
+    wagiWskaznikow,
+    wagiModyfikatorow,
+    mnoznikSL: zaokr(lerp(1.5, d.mnoznikSL, t), 0.05),
+    celeR: [
+      zaokr(lerp(k.celeR[0], d.celeR[0], t), 0.1),
+      zaokr(lerp(k.celeR[1], d.celeR[1], t), 0.1),
+      zaokr(lerp(k.celeR[2], d.celeR[2], t), 0.1),
+    ],
+    minRR: zaokr(lerp(k.minRR, d.minRR, t), 0.1),
+    progWyniku: Math.round(lerp(k.progWyniku, d.progWyniku, t)),
+    minZgodnosc: dni <= 10 ? 3 : 2,
+    // Przy pozycji trzymanej dniami dochodzi koszt fundingu i ryzyko luki –
+    // dźwignia ma sufit malejący z długością horyzontu.
+    maksDzwignia: dni <= 3 ? 10 : dni <= 10 ? 7 : dni <= 30 ? 5 : 3,
+    cooldownSwiec: 1,
+    domyslneRyzykoProc: zaokr(lerp(k.domyslneRyzykoProc, d.domyslneRyzykoProc, t), 0.5),
+    waznoscGodzin: dni * 24,
+    kolorAkcentu: '#22C3E6',
+    oknoSwingu,
+    dniWlasne: dni,
+  }
 }

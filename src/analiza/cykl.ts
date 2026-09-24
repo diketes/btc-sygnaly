@@ -2,6 +2,9 @@
  * Cykl życia sygnału: śledzenie aktywnych pozycji względem ceny na żywo.
  *
  * Reguły:
+ *  • wejście limitem → pozycja powstaje dopiero, gdy cena dotknie poziomu
+ *                      zlecenia; wcześniej stop i cele się nie liczą, a po
+ *                      terminie sygnał wygasa bez wyniku (jak w backteście),
  *  • TP1 osiągnięty  → stop loss przesuwany na próg rentowności (break even),
  *  • TP2 osiągnięty  → sygnał liczony jako zyskowny nawet po powrocie do BE,
  *  • TP3 osiągnięty  → zamknięcie z zyskiem,
@@ -50,6 +53,29 @@ export function zaktualizujSygnal(
     const z: ZdarzenieSygnalu = { czas: teraz, typ, cena, opis }
     noweZdarzenia.push(z)
     s.zdarzenia.push(z)
+  }
+
+  // 0. Zlecenie limit czeka, aż cena dotknie jego poziomu – z której strony
+  //    by nie nadchodziła. Bez tego sygnał, którego wejście nigdy nie weszło,
+  //    zbierałby „zyski” z ruchu, w którym nikt nie miał pozycji.
+  if (s.wypelniony === false) {
+    const odGory = s.cenaOdniesienia > s.wejscie
+    const dotknela = odGory ? cena <= s.wejscie : cena >= s.wejscie
+    if (!dotknela) {
+      if (teraz >= s.wygasa) {
+        s.status = 'wygasly'
+        s.zamkniety = teraz
+        s.wynikR = null
+        dodaj(
+          'wygasly',
+          `Cena nie doszła do poziomu wejścia ${s.wejscie.toFixed(0)} USDT – zlecenie nie weszło, transakcji nie było.`,
+        )
+        return { sygnal: s, zmienil: true, noweZdarzenia }
+      }
+      return { sygnal: wejsciowy, zmienil: false, noweZdarzenia }
+    }
+    s.wypelniony = true
+    dodaj('wejscie', `Zlecenie limit wypełnione przy ${s.wejscie.toFixed(0)} USDT – pozycja otwarta.`)
   }
 
   // 1. Stop loss ma pierwszeństwo – zawsze sprawdzamy go najpierw.
@@ -133,6 +159,11 @@ export function czyAktywny(s: Sygnal): boolean {
 
 export function czyZamkniety(s: Sygnal): boolean {
   return !czyAktywny(s)
+}
+
+/** Czy sygnał wciąż czeka na wypełnienie zlecenia limit. */
+export function czekaNaWejscie(s: Sygnal): boolean {
+  return s.wypelniony === false && czyAktywny(s)
 }
 
 /** Bieżący, niezrealizowany wynik w R dla aktywnego sygnału. */

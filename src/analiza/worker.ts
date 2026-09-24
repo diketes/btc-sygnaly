@@ -8,7 +8,7 @@
  */
 
 import { analizuj } from './silnik'
-import type { Horyzont, Interwal } from './profile'
+import type { Horyzont, Interwal, ProfilHoryzontu } from './profile'
 import {
   atr,
   bollinger,
@@ -34,6 +34,8 @@ export interface ZadanieAnalizy {
   poprzednie: Partial<Record<Horyzont, { kierunek: 'long' | 'short'; utworzony: number } | null>>
   /** Tryb „Daj sygnał” – pomija progi i zawsze zwraca kierunek. */
   naZadanie?: boolean
+  /** Profil z generatora (własna liczba dni) – zastępuje stały profil. */
+  profilWlasny?: ProfilHoryzontu
 }
 
 export interface ZadanieWskaznikow {
@@ -191,6 +193,7 @@ self.onmessage = (zdarzenie: MessageEvent<ZadanieWorkera>) => {
           kontekst: zadanie.kontekst,
           poprzedniSygnal: zadanie.poprzednie[h] ?? null,
           naZadanie: zadanie.naZadanie,
+          profilWlasny: zadanie.profilWlasny,
         })
       }
       const odpowiedz: OdpowiedzWorkera = { typ: 'analiza', id: zadanie.id, wynik }

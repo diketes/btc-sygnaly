@@ -87,7 +87,7 @@ export interface Cel {
 
 export interface ZdarzenieSygnalu {
   czas: number
-  typ: 'utworzony' | 'tp1' | 'tp2' | 'tp3' | 'sl' | 'be' | 'uniewazniony' | 'wygasly'
+  typ: 'utworzony' | 'wejscie' | 'tp1' | 'tp2' | 'tp3' | 'sl' | 'be' | 'uniewazniony' | 'wygasly'
   cena: number
   opis: string
 }
@@ -139,6 +139,24 @@ export interface Sygnal {
   brakiDoStandardu: string[]
   /** Czy wysłano już powiadomienie o zbliżeniu ceny do wejścia. */
   powiadomionoOWejsciu?: boolean
+  /**
+   * Czy pozycja faktycznie powstała. Wejście rynkowe – od razu, limit – dopiero
+   * gdy cena dotknie poziomu zlecenia (tak samo liczy backtest). Dopóki nie,
+   * stop i cele się nie liczą. Brak pola = sygnał zapisany przed tą zmianą,
+   * traktowany jak wypełniony, bo tak był wtedy rozliczany.
+   */
+  wypelniony?: boolean
+  /**
+   * Horyzont w dniach wybrany w generatorze. Obecny tylko w sygnałach
+   * z generatora – po nim odróżniamy je od sygnałów stałych horyzontów,
+   * żeby nie blokowały ani nie zastępowały kart „krótki/długi”.
+   */
+  dniHoryzontu?: number
+}
+
+/** Czy sygnał pochodzi z generatora (własny horyzont w dniach). */
+export function czyZGeneratora(s: { dniHoryzontu?: number }): boolean {
+  return typeof s.dniHoryzontu === 'number'
 }
 
 /** Zwracane, gdy warunki nie pozwalają wystawić sygnału. */

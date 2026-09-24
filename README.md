@@ -82,6 +82,64 @@ Gdy krótki termin ciągnie w górę, a długi w dół (albo odwrotnie), na pulp
 pojawia się ostrzeżenie z obiema liczbami. Zwykle oznacza to korektę wewnątrz
 nadrzędnego trendu — pozycja zgodna z krótkim terminem idzie wtedy pod prąd.
 
+## Generator – sygnał na wybraną liczbę dni
+
+Zakładka **Sygnały → Generator** (albo skrót na Pulpicie): wybierasz suwakiem lub
+przyciskiem, na ile dni ma być sygnał — **od 2 dni do 3 miesięcy** — i naciskasz
+**„Wygeneruj sygnał”**. Aplikacja:
+
+1. dociąga świeże świece z interwałów potrzebnych dla tego horyzontu (przy 3 miesiącach
+   to m.in. świece 3-dniowe i tygodniowe, których zwykłe sygnały nie używają),
+2. odświeża funding, open interest, long/short i nastroje, jeśli są starsze niż 5 minut,
+3. liczy wszystko od nowa i zawsze daje kierunek: **LONG albo SHORT**, z wejściem,
+   stopem, trzema celami i sugerowaną dźwignią.
+
+Liczba dni naprawdę zmienia sygnał, a nie tylko etykietę:
+
+| Horyzont  | Interwały          | Stop          | Cele (R)        | Maks. dźwignia |
+| --------- | ------------------ | ------------- | --------------- | -------------- |
+| 2 dni     | 15m · 1h · 4h · 1d | 1,5× ATR 1h   | 1 · 1,8 · 3     | 10×            |
+| tydzień   | 1h · 4h · 1d · 3d  | 1,85× ATR 4h  | 1,2 · 2,2 · 3,7 | 7×             |
+| 2 tygodnie | 4h · 1d · 3d · 1w | 2,05× ATR 1d  | 1,3 · 2,4 · 4   | 5×             |
+| miesiąc   | 4h · 1d · 3d · 1w  | 2,3× ATR 1d   | 1,4 · 2,7 · 4,4 | 5×             |
+| 3 miesiące | 4h · 1d · 3d · 1w | 2,6× ATR 1d   | 1,5 · 3 · 5     | 3×             |
+
+Stop, cele, wymagany stosunek zysku do ryzyka i wagi wskaźników przechodzą płynnie
+(w skali logarytmicznej) od profilu krótkiego do długiego. Sygnał żyje dokładnie tyle
+dni, ile wybrałeś.
+
+Obok wyniku stoi **historia z backtestu** dla najbliższego policzonego horyzontu:
+trafność, średni wynik w R, **95-procentowy przedział ufności** i ostrzeżenie, gdy
+transakcji było za mało, żeby odróżnić przewagę od szczęścia. Wyniki z ostatnich
+2 lat (przycisk naciskany za każdym razem, gdy nie było otwartej pozycji):
+
+| Dni | Transakcji | Trafność | Średnio | Przedział 95%     |
+| --- | ---------- | -------- | ------- | ----------------- |
+| 2   | 555        | 40%      | +0,21R  | +0,10 … +0,32R    |
+| 3   | 387        | 39%      | +0,22R  | +0,09 … +0,36R    |
+| 7   | 138        | 47%      | +0,20R  | −0,02 … +0,42R    |
+| 14  | 47         | 49%      | +0,18R  | −0,10 … +0,45R    |
+| 30  | 27         | 41%      | +0,11R  | szeroki           |
+| 90  | 9          | 44%      | +0,68R  | za mało danych    |
+
+Uczciwie: przewaga wychodzi poza granice przypadku tylko dla 2–3 dni. Dłuższe
+horyzonty mają za mało transakcji w 2 lata, żeby cokolwiek przesądzać — i aplikacja
+to mówi wprost, zamiast dopasowywać parametry do szumu. Pełna tabela: `npm run
+backtest:generator` (liczone lokalnie, bo Binance blokuje serwery GitHuba).
+
+Wynik to podgląd. Przycisk **„Śledź ten sygnał”** bierze go pod obserwację:
+powiadomienia o wejściu, TP i SL, osobne statystyki w zakładce Skuteczność.
+Śledzony jest jeden sygnał z generatora naraz — nowy zamyka poprzedni po bieżącej
+cenie, więc porzucenie przegrywającej pozycji nie wymazuje jej ze statystyk.
+
+### Wejście limitem
+
+Gdy cena uciekła daleko od średniej, silnik proponuje wejście limitem na jej retest.
+Taka pozycja **powstaje dopiero, gdy cena dotknie poziomu zlecenia** — wcześniej stop
+i cele się nie liczą, a karta pokazuje „Czeka na wejście” i ile brakuje. Jeśli cena
+nie dojdzie przed terminem, sygnał wygasa **bez wyniku** i nie trafia do statystyk.
+Dokładnie tak samo liczy backtest. (Dotyczy wszystkich sygnałów, nie tylko generatora.)
+
 ## Szybki start
 
 ```bash
@@ -105,6 +163,8 @@ Wymagania: Node 20 lub nowszy.
 | `npm run sprawdz`          | wszystkie kontrole naraz                                     |
 | `npm run sprawdz:app`      | klika przez aplikację w przeglądarce i robi zrzuty           |
 | `npm run test:cena`        | czy cena jest czytelna na słabym telefonie i przy dużej czcionce |
+| `npm run test:generator`   | przechodzi generator jak człowiek: suwak, generowanie, śledzenie, przeładowanie |
+| `npm run backtest:generator` | backtest generatora dla 2–90 dni, zapisuje `historiaGeneratora.json` |
 | `npm run apk`              | buduje APK (wymaga JDK 17+ i Android SDK)                    |
 
 Backtest przyjmuje argumenty: `npm run backtest -- dlugi 4` (horyzont i liczba lat).

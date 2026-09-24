@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { analizuj } from './silnik'
-import { MS_INTERWALU, PROFILE, type Interwal } from './profile'
-import { czySygnal, czyCzekaj, PUSTY_KONTEKST, type SwieceWgInterwalu } from './typy'
+import { MS_INTERWALU, PROFILE, profilDlaDni, type Interwal } from './profile'
+import { czySygnal, czyCzekaj, czyZGeneratora, PUSTY_KONTEKST, type SwieceWgInterwalu } from './typy'
 import { zaktualizujSygnal } from './cykl'
 import type { Swieca } from './wskazniki'
 
@@ -266,7 +266,9 @@ describe('silnik – ten sam wynik dla tego samego wejścia', () => {
 
 describe('cykl życia sygnału', () => {
   const swieceWg = zestaw('dlugi', { dryf: 0.006, szum: 0.004 })
-  const sygnal = analizuj({ horyzont: 'dlugi', swieceWg })
+  const surowy = analizuj({ horyzont: 'dlugi', swieceWg })
+  // Pozycja otwarta – niezależnie od tego, czy silnik dał wejście rynkowe, czy limit.
+  const sygnal = czySygnal(surowy) ? { ...surowy, wypelniony: true } : surowy
 
   it('trafiony TP1 przesuwa stop na próg rentowności', () => {
     if (!czySygnal(sygnal)) return
@@ -295,6 +297,61 @@ describe('cykl życia sygnału', () => {
     const { sygnal: zamkniety } = zaktualizujSygnal(sygnal, sygnal.stopLoss)
     const { zmienil } = zaktualizujSygnal(zamkniety, sygnal.cele[2].cena)
     expect(zmienil).toBe(false)
+  })
+})
+
+describe('cykl życia – wejście limitem', () => {
+  const swieceWg = zestaw('dlugi', { dryf: 0.006, szum: 0.004 })
+  const baza = analizuj({ horyzont: 'dlugi', swieceWg })
+  if (!czySygnal(baza)) throw new Error('brak sygnału do testu')
+
+  // Long z limitem 1R pod ceną: cena musi zejść do wejścia, żeby pozycja powstała.
+  const ryzyko = Math.abs(baza.wejscie - baza.stopLoss)
+  const limit = {
+    ...baza,
+    kierunek: 'long' as const,
+    wypelniony: false,
+    cenaOdniesienia: baza.wejscie + ryzyko,
+  }
+
+  it('silnik oznacza wejście rynkowe jako wypełnione, a limit jako oczekujące', () => {
+    expect(baza.wypelniony).toBe(baza.typWejscia.startsWith('rynek'))
+  })
+
+  it('cel trafiony przed wejściem się nie liczy', () => {
+    const { sygnal: po, zmienil } = zaktualizujSygnal(limit, limit.cele[2].cena)
+    expect(zmienil).toBe(false)
+    expect(po.status).toBe('aktywny')
+    expect(po.cele.every((c) => !c.osiagniety)).toBe(true)
+  })
+
+  it('po terminie bez wejścia sygnał wygasa bez wyniku – nie wchodzi do statystyk', () => {
+    const { sygnal: po } = zaktualizujSygnal(limit, limit.cele[0].cena, limit.wygasa + 1)
+    expect(po.status).toBe('wygasly')
+    expect(po.wynikR).toBeNull()
+    expect(po.zdarzenia.at(-1)?.opis).toContain('nie weszło')
+  })
+
+  it('dotknięcie wejścia otwiera pozycję, potem stop liczy się normalnie', () => {
+    const { sygnal: otwarty, noweZdarzenia } = zaktualizujSygnal(limit, limit.wejscie)
+    expect(otwarty.wypelniony).toBe(true)
+    expect(noweZdarzenia.map((z) => z.typ)).toContain('wejscie')
+    const { sygnal: po } = zaktualizujSygnal(otwarty, limit.stopLoss)
+    expect(po.status).toBe('zamkniety_strata')
+    expect(po.wynikR).toBeCloseTo(-1, 6)
+  })
+
+  it('zlecenie nad ceną (wybicie) wypełnia się, gdy cena urośnie do poziomu', () => {
+    const odDolu = { ...limit, cenaOdniesienia: limit.wejscie - ryzyko * 0.5 }
+    expect(zaktualizujSygnal(odDolu, limit.wejscie - ryzyko * 0.2).zmienil).toBe(false)
+    expect(zaktualizujSygnal(odDolu, limit.wejscie + 1).sygnal.wypelniony).toBe(true)
+  })
+
+  it('sygnały zapisane przed tą zmianą (bez pola) liczą się jak dotąd', () => {
+    const stary = { ...limit }
+    delete (stary as { wypelniony?: boolean }).wypelniony
+    const { sygnal: po } = zaktualizujSygnal(stary, limit.cele[0].cena)
+    expect(po.cele[0].osiagniety).toBe(true)
   })
 })
 
@@ -419,5 +476,84 @@ describe('silnik – odstępy między celami', () => {
       expect(tp3.r).toBeGreaterThan(tp2.r * 1.2)
     }
     expect(sprawdzonych).toBeGreaterThan(0)
+  })
+})
+
+describe('silnik – generator z własnym horyzontem', () => {
+  /**
+   * Pełny zestaw interwałów dla generatora. Zmienność i dryf skalowane jak
+   * w błądzeniu losowym: świeca 4× dłuższa rusza się ~2× mocniej. Bez tego
+   * świeca dzienna byłaby tak samo „spokojna” jak godzinowa i porównanie
+   * stopów między horyzontami nic by nie mierzyło.
+   */
+  const wszystkie = (dryfNaGodzine: number, ziarno = 99): SwieceWgInterwalu => {
+    const out: SwieceWgInterwalu = {}
+    for (const i of ['15m', '1h', '4h', '1d', '3d', '1w'] as Interwal[]) {
+      const godzin = MS_INTERWALU[i] / 3_600_000
+      out[i] = generuj(400, i, {
+        dryf: dryfNaGodzine * godzin,
+        szum: 0.004 * Math.sqrt(godzin),
+        ziarno,
+      })
+    }
+    return out
+  }
+
+  it('na żądanie zawsze daje kierunek dla każdego horyzontu z siatki', () => {
+    const swieceWg = wszystkie(0.0002)
+    for (const dni of [2, 5, 14, 30, 60, 90]) {
+      const wynik = analizuj({
+        horyzont: dni <= 10 ? 'krotki' : 'dlugi',
+        swieceWg,
+        naZadanie: true,
+        profilWlasny: profilDlaDni(dni),
+      })
+      expect(czySygnal(wynik), `${dni} dni`).toBe(true)
+    }
+  })
+
+  it('sygnał niesie liczbę dni, ważność i interwał bazowy profilu', () => {
+    const p = profilDlaDni(21)
+    const czas = Date.UTC(2026, 5, 1)
+    const wynik = analizuj({
+      horyzont: 'dlugi',
+      swieceWg: wszystkie(0.0003),
+      naZadanie: true,
+      profilWlasny: p,
+      teraz: czas,
+    })
+    if (!czySygnal(wynik)) throw new Error('brak sygnału')
+    expect(wynik.dniHoryzontu).toBe(21)
+    expect(czyZGeneratora(wynik)).toBe(true)
+    expect(wynik.wygasa - czas).toBe(21 * 24 * 3_600_000)
+    expect(wynik.interwalBazowy).toBe(p.interwalBazowy)
+    expect(wynik.id).toContain('gen21-')
+  })
+
+  it('krótszy horyzont daje ciaśniejszy stop niż dłuższy', () => {
+    const swieceWg = wszystkie(0.0002, 7)
+    const odleglosc = (dni: number) => {
+      const w = analizuj({
+        horyzont: dni <= 10 ? 'krotki' : 'dlugi',
+        swieceWg,
+        naZadanie: true,
+        profilWlasny: profilDlaDni(dni),
+      })
+      if (!czySygnal(w)) throw new Error('brak sygnału')
+      return w.odlegloscSlProc
+    }
+    expect(odleglosc(2)).toBeLessThan(odleglosc(30))
+    expect(odleglosc(5)).toBeLessThan(odleglosc(90))
+  })
+
+  it('zwykłe sygnały nie mają znacznika generatora', () => {
+    const wynik = analizuj({
+      horyzont: 'dlugi',
+      swieceWg: zestaw('dlugi', { dryf: 0.006, szum: 0.004 }),
+    })
+    if (czySygnal(wynik)) {
+      expect(wynik.dniHoryzontu).toBeUndefined()
+      expect(czyZGeneratora(wynik)).toBe(false)
+    }
   })
 })

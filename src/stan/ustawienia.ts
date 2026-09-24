@@ -32,6 +32,8 @@ export interface Ustawienia {
   sprawdzajAktualizacje: boolean
   /** Pobieraj nowe wersje samodzielnie w tle – tylko przez Wi-Fi. */
   pobierajAktualizacjeSamodzielnie: boolean
+  /** Ostatnio wybrany horyzont generatora w dniach (2–90). */
+  dniGeneratora: number
 }
 
 export const DOMYSLNE: Ustawienia = {
@@ -55,6 +57,7 @@ export const DOMYSLNE: Ustawienia = {
   pominietaWersja: '',
   sprawdzajAktualizacje: true,
   pobierajAktualizacjeSamodzielnie: true,
+  dniGeneratora: 7,
 }
 
 interface StanUstawien extends Ustawienia {

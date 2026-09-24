@@ -4,9 +4,9 @@
  */
 
 import { motion } from 'framer-motion'
-import { biezacyWynikR, postepDoCelu } from '@/analiza/cykl'
-import { PROFILE } from '@/analiza/profile'
-import { czySygnal, type Czekaj, type Sygnal, type WynikAnalizy } from '@/analiza/typy'
+import { biezacyWynikR, czekaNaWejscie, postepDoCelu } from '@/analiza/cykl'
+import { etykietaHoryzontu, opisDniDopelniacz, PROFILE } from '@/analiza/profile'
+import { czySygnal, czyZGeneratora, type Czekaj, type Sygnal, type WynikAnalizy } from '@/analiza/typy'
 import { cena as fCena, liczba, procent, temu, za } from '@/lib/format'
 import {
   IkonaBlyskawica,
@@ -15,21 +15,32 @@ import {
   IkonaOstrzezenie,
   IkonaStrzalkaDol,
   IkonaStrzalkaGora,
+  IkonaSuwak,
   IkonaTarcza,
   IkonaZegar,
 } from './Ikony'
 
 const SPREZYNA = { type: 'spring' as const, stiffness: 240, damping: 28 }
 
-function Naglowek({ horyzont }: { horyzont: 'krotki' | 'dlugi' }) {
-  const p = PROFILE[horyzont]
+/** Akcent sygnałów z generatora – odróżnia je od kart krótki/długi. */
+export const KOLOR_GENERATORA = '#22C3E6'
+
+function Naglowek({ horyzont, dni }: { horyzont: 'krotki' | 'dlugi'; dni?: number }) {
+  const zGeneratora = typeof dni === 'number'
+  const kolor = zGeneratora ? KOLOR_GENERATORA : PROFILE[horyzont].kolorAkcentu
   return (
     <span
       className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
-      style={{ background: `${p.kolorAkcentu}1f`, color: p.kolorAkcentu }}
+      style={{ background: `${kolor}1f`, color: kolor }}
     >
-      {horyzont === 'krotki' ? <IkonaBlyskawica rozmiar={12} /> : <IkonaGora rozmiar={12} />}
-      {p.nazwa}
+      {zGeneratora ? (
+        <IkonaSuwak rozmiar={12} />
+      ) : horyzont === 'krotki' ? (
+        <IkonaBlyskawica rozmiar={12} />
+      ) : (
+        <IkonaGora rozmiar={12} />
+      )}
+      {etykietaHoryzontu({ horyzont, dniHoryzontu: dni })}
     </span>
   )
 }
@@ -128,9 +139,11 @@ interface PropsCzekaj {
   /** Wywoływane po naciśnięciu „Daj sygnał”. */
   naDajSygnal?: () => void
   liczySygnal?: boolean
+  /** Horyzont w dniach, gdy wynik pochodzi z generatora. */
+  dniGeneratora?: number
 }
 
-function KartaCzekaj({ analiza, wskazania, naDajSygnal, liczySygnal }: PropsCzekaj) {
+function KartaCzekaj({ analiza, wskazania, naDajSygnal, liczySygnal, dniGeneratora }: PropsCzekaj) {
   const { postep } = analiza
   const kolorSklonnosci =
     postep.sklonnosc === 'long'
@@ -148,7 +161,7 @@ function KartaCzekaj({ analiza, wskazania, naDajSygnal, liczySygnal }: PropsCzek
       className="karta p-4"
     >
       <div className="mb-3 flex items-center justify-between">
-        <Naglowek horyzont={analiza.horyzont} />
+        <Naglowek horyzont={analiza.horyzont} dni={dniGeneratora} />
         <span className="etykieta">Brak sygnału</span>
       </div>
 
@@ -260,7 +273,14 @@ export function KartaAktywnegoSygnalu({
   const cenaDoLiczenia = cenaBiezaca ?? sygnal.cenaOdniesienia
   const biezaceR = biezacyWynikR(sygnal, cenaDoLiczenia)
   const postep = postepDoCelu(sygnal, cenaDoLiczenia)
-  const zamkniety = sygnal.status === 'zamkniety_zysk' || sygnal.status === 'zamkniety_strata' || sygnal.status === 'wygasly'
+  const zamkniety =
+    sygnal.status === 'zamkniety_zysk' ||
+    sygnal.status === 'zamkniety_strata' ||
+    sygnal.status === 'wygasly' ||
+    sygnal.status === 'uniewazniony'
+  const zGeneratora = czyZGeneratora(sygnal)
+  const czeka = czekaNaWejscie(sygnal)
+  const doWejsciaProc = (Math.abs(cenaDoLiczenia - sygnal.wejscie) / cenaDoLiczenia) * 100
 
   return (
     <motion.div
@@ -280,9 +300,9 @@ export function KartaAktywnegoSygnalu({
       />
 
       <div className="mb-3 flex items-start justify-between gap-2">
-        <Naglowek horyzont={sygnal.horyzont} />
+        <Naglowek horyzont={sygnal.horyzont} dni={sygnal.dniHoryzontu} />
         <div className="flex flex-wrap items-center justify-end gap-1.5">
-          {sygnal.naZadanie && (
+          {sygnal.naZadanie && !zGeneratora && (
             <span className="rounded-full bg-[#F7931A]/15 px-2 py-1 text-[10px] font-semibold text-[#F7931A]">
               NA ŻĄDANIE
             </span>
@@ -313,11 +333,24 @@ export function KartaAktywnegoSygnalu({
         </div>
       )}
 
+      {/* Generator zawsze daje kierunek – warto wiedzieć, kiedy silnik dałby go i bez przycisku. */}
+      {zGeneratora && sygnal.brakiDoStandardu.length === 0 && (
+        <div className="mb-3 rounded-2xl bg-[#00E28A]/8 p-3">
+          <p className="text-[11.5px] font-semibold" style={{ color: 'var(--zielen)' }}>
+            Przeszedł wszystkie progi silnika
+          </p>
+          <p className="mt-0.5 text-[11.5px] leading-snug" style={{ color: 'var(--tekst-2)' }}>
+            Taki sygnał silnik wystawiłby sam, bez naciskania przycisku.
+          </p>
+        </div>
+      )}
+
       {/* Kierunek + pewność */}
       <div className="mb-4 flex items-center gap-3">
         <div
           className="flex h-12 w-12 items-center justify-center rounded-2xl"
-          style={{ background: `${kolor}1f`, color: kolor }}
+          // Kolor wprost: `var(--zielen)1f` to niepoprawny CSS i tło po cichu znikało.
+          style={{ background: long ? 'rgba(0,226,138,0.12)' : 'rgba(255,59,92,0.12)', color: kolor }}
         >
           {long ? <IkonaStrzalkaGora rozmiar={24} /> : <IkonaStrzalkaDol rozmiar={24} />}
         </div>
@@ -327,7 +360,7 @@ export function KartaAktywnegoSygnalu({
               {long ? 'LONG' : 'SHORT'}
             </span>
             <span className="cyfry text-sm" style={{ color: 'var(--tekst-3)' }}>
-              {PROFILE[sygnal.horyzont].opisDlugosci}
+              {zGeneratora ? `do ${opisDniDopelniacz(sygnal.dniHoryzontu!)}` : PROFILE[sygnal.horyzont].opisDlugosci}
             </span>
           </div>
           <div className="mt-1.5 flex items-center gap-2">
@@ -370,7 +403,12 @@ export function KartaAktywnegoSygnalu({
           { etykieta: 'Maks. dźwignia', wartosc: `${sygnal.maksDzwignia}×`, ikona: <IkonaTarcza rozmiar={13} /> },
           {
             etykieta: zamkniety ? 'Wynik' : 'Teraz',
-            wartosc: `${biezaceR >= 0 ? '+' : ''}${(zamkniety ? (sygnal.wynikR ?? 0) : biezaceR).toFixed(2).replace('.', ',')}R`,
+            wartosc: (() => {
+              if (czeka) return 'czeka'
+              if (zamkniety && sygnal.wynikR === null) return '—'
+              const r = zamkniety ? (sygnal.wynikR ?? 0) : biezaceR
+              return `${r >= 0 ? '+' : ''}${r.toFixed(2).replace('.', ',')}R`
+            })(),
             ikona: null,
           },
         ].map((m) => (
@@ -384,8 +422,20 @@ export function KartaAktywnegoSygnalu({
         ))}
       </div>
 
+      {/* Zlecenie limit jeszcze nie weszło – bez tego „Teraz +0,6R” sugerowałoby pozycję, której nie ma. */}
+      {czeka && (
+        <div className="mt-3 rounded-xl bg-white/4 p-2.5" data-czeka-na-wejscie>
+          <p className="text-[12px] font-semibold">Czeka na wejście</p>
+          <p className="mt-0.5 text-[11.5px] leading-snug" style={{ color: 'var(--tekst-2)' }}>
+            Zlecenie limit na {fCena(sygnal.wejscie)} USDT – brakuje{' '}
+            {doWejsciaProc.toFixed(2).replace('.', ',')}%. Stop i cele zaczną się liczyć, gdy
+            cena tam dojdzie. Jeśli nie dojdzie przed terminem, sygnał wygaśnie bez wyniku.
+          </p>
+        </div>
+      )}
+
       {/* Postęp do celu */}
-      {!zamkniety && (
+      {!zamkniety && !czeka && (
         <div className="mt-3">
           <div className="mb-1 flex items-center justify-between">
             <span className="etykieta">Do celu TP{postep.cel}</span>
@@ -492,6 +542,7 @@ export function KartaAnalizy({
   wskazania,
   naDajSygnal,
   liczySygnal,
+  dniGeneratora,
 }: {
   analiza: WynikAnalizy
   cenaBiezaca: number | null
@@ -500,6 +551,7 @@ export function KartaAnalizy({
   wskazania?: { czas: number; wynik: number }[]
   naDajSygnal?: () => void
   liczySygnal?: boolean
+  dniGeneratora?: number
 }) {
   if (czySygnal(analiza)) {
     return (
@@ -517,28 +569,33 @@ export function KartaAnalizy({
       wskazania={wskazania}
       naDajSygnal={naDajSygnal}
       liczySygnal={liczySygnal}
+      dniGeneratora={dniGeneratora}
     />
   )
 }
 
 /** Kompaktowy wiersz historii. */
 export function WierszHistorii({ sygnal }: { sygnal: Sygnal }) {
+  const bezWyniku = sygnal.wynikR === null
   const r = sygnal.wynikR ?? 0
   const zysk = r > 0
-  const neutralny = Math.abs(r) < 0.02
+  const neutralny = bezWyniku || Math.abs(r) < 0.02
   const kolor = neutralny ? 'var(--tekst-2)' : zysk ? 'var(--zielen)' : 'var(--czerwien)'
   const opisStatusu: Record<string, string> = {
     zamkniety_zysk: 'Zamknięty z zyskiem',
     zamkniety_strata: 'Stop loss',
-    wygasly: 'Wygasł',
-    uniewazniony: 'Unieważniony',
+    wygasly: bezWyniku ? 'Wejście nie weszło' : 'Wygasł',
+    uniewazniony: bezWyniku ? 'Unieważniony przed wejściem' : 'Unieważniony',
   }
 
   return (
     <div className="flex items-center gap-3 rounded-2xl bg-white/3 p-3">
       <div
         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
-        style={{ background: `${sygnal.kierunek === 'long' ? 'var(--zielen)' : 'var(--czerwien)'}18`, color: sygnal.kierunek === 'long' ? 'var(--zielen)' : 'var(--czerwien)' }}
+        style={{
+          background: sygnal.kierunek === 'long' ? 'rgba(0,226,138,0.1)' : 'rgba(255,59,92,0.1)',
+          color: sygnal.kierunek === 'long' ? 'var(--zielen)' : 'var(--czerwien)',
+        }}
       >
         {sygnal.kierunek === 'long' ? <IkonaStrzalkaGora rozmiar={16} /> : <IkonaStrzalkaDol rozmiar={16} />}
       </div>
@@ -546,7 +603,7 @@ export function WierszHistorii({ sygnal }: { sygnal: Sygnal }) {
         <p className="text-[13px] font-semibold">
           {sygnal.kierunek === 'long' ? 'LONG' : 'SHORT'}{' '}
           <span className="font-normal" style={{ color: 'var(--tekst-3)' }}>
-            · {PROFILE[sygnal.horyzont].nazwa.toLowerCase()}
+            · {etykietaHoryzontu(sygnal).toLowerCase()}
           </span>
         </p>
         <p className="truncate text-[11px]" style={{ color: 'var(--tekst-3)' }}>
@@ -556,8 +613,7 @@ export function WierszHistorii({ sygnal }: { sygnal: Sygnal }) {
       </div>
       <div className="text-right">
         <p className="cyfry text-[14px] font-bold" style={{ color: kolor }}>
-          {r >= 0 ? '+' : ''}
-          {liczba(r)}R
+          {bezWyniku ? '—' : `${r >= 0 ? '+' : ''}${liczba(r)}R`}
         </p>
         <p className="cyfry text-[10px]" style={{ color: 'var(--tekst-3)' }}>
           pewność {sygnal.pewnosc}%

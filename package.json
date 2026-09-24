@@ -21,7 +21,9 @@
     "android:add": "npx cap add android",
     "apk": "node scripts/buduj-apk.mjs",
     "pwa": "npm run build",
-    "test:cena": "node scripts/test-czytelnosc-ceny.mjs"
+    "test:cena": "node scripts/test-czytelnosc-ceny.mjs",
+    "backtest:generator": "tsx scripts/backtest-generator.ts",
+    "test:generator": "node scripts/test-generatora.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^6.2.0",

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { horyzontyDlaTrybu, PROFILE } from '@/analiza/profile'
 import {
   rozbijWgHoryzontu,
@@ -7,20 +7,28 @@ import {
   rozbijWgPewnosci,
   rozbijWgRezimu,
   type RozbicieStatystyk,
+  type Statystyki,
 } from '@/analiza/statystyki'
+import { czyZGeneratora } from '@/analiza/typy'
 import { liczba, procent } from '@/lib/format'
 import { zbudujKontekstRynku } from '@/stan/kontekst'
 import { uzyjRynku } from '@/stan/rynek'
-import { uzyjSygnalow } from '@/stan/sygnaly'
+import { aktywnyDlaHoryzontu, aktywnyZGeneratora, uzyjSygnalow } from '@/stan/sygnaly'
 import { uzyjUstawien } from '@/stan/ustawienia'
 import { IkonaSygnaly } from '@/ui/Ikony'
-import { KartaAnalizy, WierszHistorii } from '@/ui/KartaSygnalu'
+import { KartaAktywnegoSygnalu, KartaAnalizy, WierszHistorii } from '@/ui/KartaSygnalu'
+import { PanelGeneratora } from '@/ui/PanelGeneratora'
 import { Ekran, Kafelek, NaglowekEkranu, PustyStan, Sekcja } from '@/ui/Powloka'
 import { PrzelacznikHoryzontu } from '@/ui/PrzelacznikHoryzontu'
 
-type Karta = 'aktywne' | 'historia' | 'statystyki'
+export type KartaSygnalow = 'generator' | 'aktywne' | 'historia' | 'statystyki'
 
-export function Sygnaly() {
+interface Props {
+  karta: KartaSygnalow
+  naKarte: (k: KartaSygnalow) => void
+}
+
+export function Sygnaly({ karta, naKarte: ustawKarte }: Props) {
   const cena = uzyjRynku((s) => s.cena)
   const {
     analizy,
@@ -28,26 +36,32 @@ export function Sygnaly() {
     historia,
     statystyki,
     statystykiNaZadanie,
+    statystykiGeneratora,
     wskazania,
     liczenieNaZadanie,
     dajSygnal,
   } = uzyjSygnalow()
   const trybHoryzontu = uzyjUstawien((s) => s.trybHoryzontu)
   const ustaw = uzyjUstawien((s) => s.ustaw)
-  const [karta, ustawKarte] = useState<Karta>('aktywne')
   const [rozwiniety, ustawRozwiniety] = useState<string | null>(null)
 
   const horyzonty = horyzontyDlaTrybu(trybHoryzontu)
+  const sledzony = aktywnyZGeneratora(aktywne)
 
-  const rozbicia = useMemo(
-    () => ({
-      horyzont: rozbijWgHoryzontu(historia),
-      kierunek: rozbijWgKierunku(historia),
-      pewnosc: rozbijWgPewnosci(historia),
-      rezim: rozbijWgRezimu(historia),
-    }),
-    [historia],
-  )
+  // Rozbicia tylko dla sygnałów wystawionych przez silnik samodzielnie –
+  // tak samo jak kafelki nad nimi. Wymuszone i z generatora mają swoje sekcje.
+  const rozbicia = useMemo(() => {
+    const zwykle = historia.filter((s) => !s.naZadanie && !czyZGeneratora(s))
+    return {
+      horyzont: rozbijWgHoryzontu(zwykle),
+      kierunek: rozbijWgKierunku(zwykle),
+      pewnosc: rozbijWgPewnosci(zwykle),
+      rezim: rozbijWgRezimu(zwykle),
+    }
+  }, [historia])
+
+  const brakStatystyk =
+    statystyki.liczba === 0 && statystykiNaZadanie.liczba === 0 && statystykiGeneratora.liczba === 0
 
   return (
     <Ekran>
@@ -57,18 +71,20 @@ export function Sygnaly() {
       />
 
       <div className="px-4">
-        <div className="mb-3 flex gap-1.5">
+        <div className="mb-3 flex gap-1">
           {(
             [
+              ['generator', 'Generator'],
               ['aktywne', 'Aktywne'],
               ['historia', 'Historia'],
               ['statystyki', 'Skuteczność'],
-            ] as [Karta, string][]
+            ] as [KartaSygnalow, string][]
           ).map(([id, etykieta]) => (
             <button
               key={id}
               onClick={() => ustawKarte(id)}
-              className="relative flex-1 rounded-xl py-2 text-[12.5px] font-semibold"
+              data-karta-sygnalow={id}
+              className="relative flex-auto whitespace-nowrap rounded-xl px-2 py-2 text-[12px] font-semibold"
               style={{ color: karta === id ? '#050609' : 'var(--tekst-2)' }}
             >
               {karta === id && (
@@ -83,13 +99,29 @@ export function Sygnaly() {
           ))}
         </div>
 
-        <AnimatePresence mode="wait">
+        {/*
+          Podzakładki bez `AnimatePresence mode="wait"`: potrafił utknąć na
+          animacji wyjścia (np. po wymianie śledzonego sygnału) i zakładka
+          zostawała na starej treści. Jak w App – stara treść znika od razu,
+          nowa wjeżdża animacją wejścia.
+        */}
+        <div>
+          {karta === 'generator' && (
+            <motion.div
+              key="generator"
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.18 }}
+            >
+              <PanelGeneratora />
+            </motion.div>
+          )}
+
           {karta === 'aktywne' && (
             <motion.div
               key="aktywne"
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 10 }}
               transition={{ duration: 0.18 }}
             >
               <div className="mb-4">
@@ -102,7 +134,7 @@ export function Sygnaly() {
 
               <div className="space-y-3">
                 {horyzonty.map((h) => {
-                  const aktywny = aktywne.find((s) => s.horyzont === h)
+                  const aktywny = aktywnyDlaHoryzontu(aktywne, h)
                   const analiza = aktywny ?? analizy[h]
                   if (!analiza) {
                     return (
@@ -128,6 +160,15 @@ export function Sygnaly() {
                     />
                   )
                 })}
+
+                {sledzony && (
+                  <KartaAktywnegoSygnalu
+                    sygnal={sledzony}
+                    cenaBiezaca={cena}
+                    rozwinieta={rozwiniety === sledzony.id}
+                    naKlik={() => ustawRozwiniety(rozwiniety === sledzony.id ? null : sledzony.id)}
+                  />
+                )}
               </div>
             </motion.div>
           )}
@@ -137,7 +178,6 @@ export function Sygnaly() {
               key="historia"
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 10 }}
               transition={{ duration: 0.18 }}
             >
               {historia.length === 0 ? (
@@ -163,10 +203,9 @@ export function Sygnaly() {
               key="statystyki"
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 10 }}
               transition={{ duration: 0.18 }}
             >
-              {statystyki.liczba === 0 && statystykiNaZadanie.liczba === 0 ? (
+              {brakStatystyk ? (
                 <div className="karta">
                   <PustyStan
                     tytul="Za mało danych"
@@ -180,7 +219,7 @@ export function Sygnaly() {
                     <div className="karta mb-4 p-4">
                       <p className="text-[12.5px] leading-relaxed" style={{ color: 'var(--tekst-2)' }}>
                         Nie ma jeszcze zamkniętych sygnałów wystawionych przez sam silnik — poniżej
-                        widać tylko te wymuszone przyciskiem „Daj sygnał”.
+                        widać tylko te wymuszone przyciskiem albo śledzone z generatora.
                       </p>
                     </div>
                   )}
@@ -250,47 +289,21 @@ export function Sygnaly() {
                   </div>
 
                   {statystykiNaZadanie.liczba > 0 && (
-                    <Sekcja tytul="Sygnały na żądanie – osobno">
-                      <div className="karta p-4">
-                        <p className="mb-2.5 text-[11.5px] leading-relaxed" style={{ color: 'var(--tekst-3)' }}>
-                          Wymuszone przyciskiem „Daj sygnał”. Nie przeszły progów silnika, więc
-                          z założenia wypadają słabiej — dlatego nie są wliczane do skuteczności
-                          powyżej.
-                        </p>
-                        <div className="grid grid-cols-3 gap-2">
-                          {[
-                            {
-                              e: 'Skuteczność',
-                              w: `${statystykiNaZadanie.skutecznosc.toFixed(0)}%`,
-                              k:
-                                statystykiNaZadanie.skutecznosc >= statystyki.skutecznosc
-                                  ? 'var(--zielen)'
-                                  : 'var(--czerwien)',
-                            },
-                            {
-                              e: 'Średnie R',
-                              w: `${statystykiNaZadanie.sredniR >= 0 ? '+' : ''}${liczba(statystykiNaZadanie.sredniR)}`,
-                              k: statystykiNaZadanie.sredniR >= 0 ? 'var(--zielen)' : 'var(--czerwien)',
-                            },
-                            { e: 'Sygnałów', w: String(statystykiNaZadanie.liczba), k: undefined },
-                          ].map((x) => (
-                            <div key={x.e} className="rounded-xl bg-white/4 p-2 text-center">
-                              <p className="etykieta mb-0.5">{x.e}</p>
-                              <p className="cyfry text-[14px] font-bold" style={{ color: x.k }}>
-                                {x.w}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                        {statystyki.liczba > 0 && (
-                          <p className="mt-2.5 text-[11.5px]" style={{ color: 'var(--tekst-2)' }}>
-                            Dla porównania zwykłe sygnały: {statystyki.skutecznosc.toFixed(0)}% trafień,
-                            średnio {statystyki.sredniR >= 0 ? '+' : ''}
-                            {liczba(statystyki.sredniR)}R.
-                          </p>
-                        )}
-                      </div>
-                    </Sekcja>
+                    <StatystykiOsobne
+                      tytul="Sygnały na żądanie – osobno"
+                      opis="Wymuszone przyciskiem „Daj sygnał”. Nie przeszły progów silnika, więc z założenia wypadają słabiej — dlatego nie są wliczane do skuteczności powyżej."
+                      dane={statystykiNaZadanie}
+                      zwykle={statystyki}
+                    />
+                  )}
+
+                  {statystykiGeneratora.liczba > 0 && (
+                    <StatystykiOsobne
+                      tytul="Generator – osobno"
+                      opis="Śledzone sygnały z generatora na wybraną liczbę dni. Każdy horyzont gra inaczej, więc nie mieszamy ich ze zwykłymi sygnałami."
+                      dane={statystykiGeneratora}
+                      zwykle={statystyki}
+                    />
                   )}
 
                   <Sekcja tytul="W rozbiciu">
@@ -305,7 +318,7 @@ export function Sygnaly() {
               )}
             </motion.div>
           )}
-        </AnimatePresence>
+        </div>
 
         <p className="mb-4 mt-2 text-[11px] leading-relaxed" style={{ color: 'var(--tekst-3)' }}>
           To nie jest porada inwestycyjna. Handel BTC z dźwignią wiąże się z ryzykiem utraty całego
@@ -313,6 +326,57 @@ export function Sygnaly() {
         </p>
       </div>
     </Ekran>
+  )
+}
+
+function StatystykiOsobne({
+  tytul,
+  opis,
+  dane,
+  zwykle,
+}: {
+  tytul: string
+  opis: string
+  dane: Statystyki
+  zwykle: Statystyki
+}) {
+  return (
+    <Sekcja tytul={tytul}>
+      <div className="karta p-4">
+        <p className="mb-2.5 text-[11.5px] leading-relaxed" style={{ color: 'var(--tekst-3)' }}>
+          {opis}
+        </p>
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            {
+              e: 'Skuteczność',
+              w: `${dane.skutecznosc.toFixed(0)}%`,
+              k: zwykle.liczba === 0 || dane.skutecznosc >= zwykle.skutecznosc ? 'var(--zielen)' : 'var(--czerwien)',
+            },
+            {
+              e: 'Średnie R',
+              w: `${dane.sredniR >= 0 ? '+' : ''}${liczba(dane.sredniR)}`,
+              k: dane.sredniR >= 0 ? 'var(--zielen)' : 'var(--czerwien)',
+            },
+            { e: 'Sygnałów', w: String(dane.liczba), k: undefined },
+          ].map((x) => (
+            <div key={x.e} className="rounded-xl bg-white/4 p-2 text-center">
+              <p className="etykieta mb-0.5">{x.e}</p>
+              <p className="cyfry text-[14px] font-bold" style={{ color: x.k }}>
+                {x.w}
+              </p>
+            </div>
+          ))}
+        </div>
+        {zwykle.liczba > 0 && (
+          <p className="mt-2.5 text-[11.5px]" style={{ color: 'var(--tekst-2)' }}>
+            Dla porównania zwykłe sygnały: {zwykle.skutecznosc.toFixed(0)}% trafień, średnio{' '}
+            {zwykle.sredniR >= 0 ? '+' : ''}
+            {liczba(zwykle.sredniR)}R.
+          </p>
+        )}
+      </div>
+    </Sekcja>
   )
 }
 

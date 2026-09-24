@@ -7,7 +7,7 @@
  */
 
 import type { Sygnal } from '@/analiza/typy'
-import { PROFILE } from '@/analiza/profile'
+import { etykietaHoryzontu } from '@/analiza/profile'
 
 const NAGLOWKI = [
   'utworzony',
@@ -53,7 +53,7 @@ export function historiaDoCsv(sygnaly: readonly Sygnal[]): string {
       [
         data(s.utworzony),
         data(s.zamkniety),
-        PROFILE[s.horyzont].nazwa,
+        etykietaHoryzontu(s),
         s.kierunek.toUpperCase(),
         s.naZadanie ? 'tak' : 'nie',
         liczbaPl(s.wejscie),

@@ -39,6 +39,13 @@ interface StanRynku {
   /** `tylkoBrakujace` pomija interwały, które mamy świeże – oszczędza limity API. */
   odswiezSwiece: (tylkoBrakujace?: boolean) => Promise<void>
   zapewnijInterwal: (interwal: Interwal) => Promise<void>
+  /**
+   * Pilnuje, żeby podane interwały były świeże – dociąga te, których nie mamy
+   * albo które pobraliśmy dawniej niż `maksWiekMs` temu. Interwały płynące
+   * strumieniem na żywo są aktualne same z siebie i nie są pobierane ponownie.
+   * Zwraca listę interwałów, których nie udało się odświeżyć.
+   */
+  zapewnijSwieze: (interwaly: readonly Interwal[], maksWiekMs?: number) => Promise<Interwal[]>
 }
 
 /** Kiedy ostatnio pobraliśmy dany interwał z sieci. */
@@ -277,6 +284,34 @@ export const uzyjRynku = create<StanRynku>((set, get) => ({
     } catch {
       /* wykres pokaże komunikat o braku danych */
     }
+  },
+
+  async zapewnijSwieze(interwaly, maksWiekMs = SWIEZOSC_MS) {
+    const teraz = Date.now()
+    const naZywo = get().status === 'nazywo'
+    const doPobrania = interwaly.filter((i) => {
+      if ((get().swieceWg[i]?.length ?? 0) === 0) return true
+      if (naZywo && biezaceInterwaly.includes(i)) return false
+      return teraz - (pobranoInterwal.get(i) ?? 0) > maksWiekMs
+    })
+    if (doPobrania.length === 0) return []
+
+    const wyniki = await Promise.allSettled(
+      doPobrania.map(async (i) => ({
+        i,
+        dane: await pobierzSwiece(i, i === '1w' || i === '3d' ? 400 : 1000),
+      })),
+    )
+
+    const nowe: Partial<Record<Interwal, Swieca[]>> = {}
+    for (const w of wyniki) {
+      if (w.status !== 'fulfilled' || w.value.dane.length === 0) continue
+      nowe[w.value.i] = w.value.dane
+      pobranoInterwal.set(w.value.i, Date.now())
+      void zapiszSwiece(w.value.i, w.value.dane)
+    }
+    if (Object.keys(nowe).length > 0) set((s) => ({ swieceWg: { ...s.swieceWg, ...nowe } }))
+    return doPobrania.filter((i) => !nowe[i])
   },
 }))
 

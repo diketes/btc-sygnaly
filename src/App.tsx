@@ -36,7 +36,7 @@ import { Newsy } from '@/ekrany/Newsy'
 import { Powitanie } from '@/ekrany/Powitanie'
 import { Pulpit } from '@/ekrany/Pulpit'
 import { Rynek } from '@/ekrany/Rynek'
-import { Sygnaly } from '@/ekrany/Sygnaly'
+import { Sygnaly, type KartaSygnalow } from '@/ekrany/Sygnaly'
 import { Ustawienia } from '@/ekrany/Ustawienia'
 import { Wykres } from '@/ekrany/Wykres'
 
@@ -124,6 +124,8 @@ export function App() {
   const sprawdzajAktualizacje = uzyjUstawien((s) => s.sprawdzajAktualizacje)
 
   const [zakladka, ustawZakladke] = useState<Zakladka>('pulpit')
+  // Podzakładka Sygnałów trzymana tutaj, żeby skrót z Pulpitu mógł otworzyć generator.
+  const [kartaSygnalow, ustawKarteSygnalow] = useState<KartaSygnalow>('aktywne')
   const [ustawieniaOtwarte, ustawUstawieniaOtwarte] = useState(false)
   const [gotowe, ustawGotowe] = useState(false)
   const zastosujPwa = useRef<() => void>(() => window.location.reload())
@@ -324,12 +326,19 @@ export function App() {
           {zakladka === 'pulpit' && (
             <Pulpit
               naUstawienia={() => ustawUstawieniaOtwarte(true)}
-              naSygnal={() => ustawZakladke('sygnaly')}
+              naSygnal={() => {
+                ustawKarteSygnalow('aktywne')
+                ustawZakladke('sygnaly')
+              }}
+              naGenerator={() => {
+                ustawKarteSygnalow('generator')
+                ustawZakladke('sygnaly')
+              }}
               naNewsy={() => ustawZakladke('newsy')}
             />
           )}
           {zakladka === 'wykres' && <Wykres />}
-          {zakladka === 'sygnaly' && <Sygnaly />}
+          {zakladka === 'sygnaly' && <Sygnaly karta={kartaSygnalow} naKarte={ustawKarteSygnalow} />}
           {zakladka === 'newsy' && <Newsy />}
           {zakladka === 'rynek' && <Rynek />}
         </motion.div>

@@ -80,6 +80,27 @@ export const IkonaGora = ({ rozmiar = 18, klasa }: Props) => (
   </svg>
 )
 
+/** Własny horyzont z generatora – suwak. */
+export const IkonaSuwak = ({ rozmiar = 18, klasa }: Props) => (
+  <svg {...bazowe(rozmiar, klasa)}>
+    <path d="M4 7h10M18 7h2M4 17h2M10 17h10" />
+    <circle cx="16" cy="7" r="2.2" fill="currentColor" fillOpacity={0.18} />
+    <circle cx="8" cy="17" r="2.2" fill="currentColor" fillOpacity={0.18} />
+  </svg>
+)
+
+/** Generowanie – iskra. */
+export const IkonaIskra = ({ rozmiar = 18, klasa }: Props) => (
+  <svg {...bazowe(rozmiar, klasa)}>
+    <path
+      d="M12 3.5c.6 3.9 2.6 5.9 6.5 6.5-3.9.6-5.9 2.6-6.5 6.5-.6-3.9-2.6-5.9-6.5-6.5 3.9-.6 5.9-2.6 6.5-6.5z"
+      fill="currentColor"
+      fillOpacity={0.2}
+    />
+    <path d="M18.5 16.5v4M16.5 18.5h4" />
+  </svg>
+)
+
 export const IkonaStrzalkaGora = ({ rozmiar = 16, klasa }: Props) => (
   <svg {...bazowe(rozmiar, klasa)}>
     <path d="M12 19V5M5 12l7-7 7 7" />

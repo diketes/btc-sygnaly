@@ -6,7 +6,7 @@
  */
 
 import { analizuj } from './silnik'
-import type { Horyzont, Interwal } from './profile'
+import type { Horyzont, Interwal, ProfilHoryzontu } from './profile'
 import type { Swieca } from './wskazniki'
 import type { KontekstRynku, SwieceWgInterwalu, WynikAnalizy } from './typy'
 import type {
@@ -78,6 +78,7 @@ export async function policzAnalize(
   kontekst: KontekstRynku,
   poprzednie: Partial<Record<Horyzont, { kierunek: 'long' | 'short'; utworzony: number } | null>> = {},
   naZadanie = false,
+  profilWlasny?: ProfilHoryzontu,
 ): Promise<Record<string, WynikAnalizy>> {
   try {
     return await wyslij<Record<string, WynikAnalizy>>({
@@ -87,6 +88,7 @@ export async function policzAnalize(
       kontekst,
       poprzednie,
       naZadanie,
+      profilWlasny,
     })
   } catch {
     // Zapas na głównym wątku – lepiej zamrugać niż nie pokazać sygnału.
@@ -98,6 +100,7 @@ export async function policzAnalize(
         kontekst,
         poprzedniSygnal: poprzednie[h] ?? null,
         naZadanie,
+        profilWlasny,
       })
     }
     return wynik

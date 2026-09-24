@@ -1,16 +1,24 @@
 import { useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { horyzontyDlaTrybu, PROFILE } from '@/analiza/profile'
+import { biezacyWynikR, czekaNaWejscie } from '@/analiza/cykl'
+import { horyzontyDlaTrybu, opisDni, PROFILE } from '@/analiza/profile'
 import { czySygnal } from '@/analiza/typy'
 import { cena as fCena, kwota, procent, temu } from '@/lib/format'
 import { uzyjNewsow } from '@/stan/newsy'
 import { zbudujKontekstRynku } from '@/stan/kontekst'
 import { podsumujLikwidacje, uzyjRynku } from '@/stan/rynek'
-import { uzyjSygnalow } from '@/stan/sygnaly'
+import { aktywnyDlaHoryzontu, aktywnyZGeneratora, uzyjSygnalow } from '@/stan/sygnaly'
 import { uzyjUstawien } from '@/stan/ustawienia'
 import { CenaNaZywo } from '@/ui/CenaNaZywo'
-import { IkonaNewsy, IkonaOstrzezenie, IkonaUstawienia, IkonaZegar } from '@/ui/Ikony'
-import { KartaAnalizy } from '@/ui/KartaSygnalu'
+import {
+  IkonaIskra,
+  IkonaNewsy,
+  IkonaOstrzezenie,
+  IkonaStrzalkaPrawo,
+  IkonaUstawienia,
+  IkonaZegar,
+} from '@/ui/Ikony'
+import { KartaAnalizy, KOLOR_GENERATORA } from '@/ui/KartaSygnalu'
 import { Ekran, Kafelek, NaglowekEkranu, PustyStan, Sekcja, WskaznikTarcza } from '@/ui/Powloka'
 import { PrzelacznikHoryzontu } from '@/ui/PrzelacznikHoryzontu'
 import { coMozeRuszycBtc } from '@/dane/newsy'
@@ -20,10 +28,11 @@ import { za } from '@/lib/format'
 interface Props {
   naUstawienia: () => void
   naSygnal: (id: string) => void
+  naGenerator: () => void
   naNewsy: () => void
 }
 
-export function Pulpit({ naUstawienia, naSygnal, naNewsy }: Props) {
+export function Pulpit({ naUstawienia, naSygnal, naGenerator, naNewsy }: Props) {
   const { cena, ticker, status, migawka, likwidacje, ostatnieDane, danieZPamieci, odswiezSwiece, odswiezMigawke } =
     uzyjRynku()
   const { analizy, aktywne, wskazania, liczenieNaZadanie, dajSygnal } = uzyjSygnalow()
@@ -123,7 +132,7 @@ export function Pulpit({ naUstawienia, naSygnal, naNewsy }: Props) {
         <Sekcja tytul={trybHoryzontu === 'oba' ? 'Sygnały – oba horyzonty' : 'Sygnał'}>
           <div className="space-y-3">
             {horyzonty.map((h) => {
-              const aktywny = aktywne.find((s) => s.horyzont === h)
+              const aktywny = aktywnyDlaHoryzontu(aktywne, h)
               const analiza = aktywny ?? analizy[h]
               if (!analiza) {
                 return (
@@ -149,6 +158,8 @@ export function Pulpit({ naUstawienia, naSygnal, naNewsy }: Props) {
             })}
           </div>
         </Sekcja>
+
+        <SkrotGeneratora naGenerator={naGenerator} />
 
         <RozjazdHoryzontow />
 
@@ -290,6 +301,64 @@ export function Pulpit({ naUstawienia, naSygnal, naNewsy }: Props) {
 }
 
 /**
+ * Wejście do generatora: sygnał na dowolną liczbę dni od 2 do 90.
+ * Gdy jakiś sygnał z generatora jest śledzony – pokazuje, jak mu idzie.
+ */
+function SkrotGeneratora({ naGenerator }: { naGenerator: () => void }) {
+  const aktywne = uzyjSygnalow((s) => s.aktywne)
+  const cena = uzyjRynku((s) => s.cena)
+  const dni = uzyjUstawien((s) => s.dniGeneratora)
+  const sledzony = aktywnyZGeneratora(aktywne)
+  const czeka = sledzony ? czekaNaWejscie(sledzony) : false
+  const r = sledzony && cena !== null && !czeka ? biezacyWynikR(sledzony, cena) : null
+
+  return (
+    <motion.button
+      onClick={naGenerator}
+      whileTap={{ scale: 0.98 }}
+      data-skrot-generatora
+      className="karta relative mb-5 flex w-full items-center gap-3 overflow-hidden p-3.5 text-left"
+      style={{ borderColor: 'rgba(34,195,230,0.28)' }}
+    >
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -right-10 -top-12 h-32 w-32 rounded-full"
+        style={{ background: KOLOR_GENERATORA, opacity: 0.14, filter: 'blur(36px)' }}
+      />
+      <span
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl"
+        style={{ background: 'linear-gradient(135deg, #22C3E6 0%, #7C5CFF 100%)', color: '#FFFFFF' }}
+      >
+        <IkonaIskra rozmiar={19} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="naglowek block text-[14px] font-semibold">Generator sygnału</span>
+        <span className="block truncate text-[11.5px]" style={{ color: 'var(--tekst-2)' }}>
+          {sledzony
+            ? `Śledzisz ${sledzony.kierunek.toUpperCase()} · ${opisDni(sledzony.dniHoryzontu!)}`
+            : `Wybierz od 2 dni do 3 miesięcy · ostatnio ${opisDni(dni)}`}
+        </span>
+      </span>
+      {czeka ? (
+        <span className="shrink-0 text-[11px] font-semibold" style={{ color: 'var(--tekst-2)' }}>
+          czeka na wejście
+        </span>
+      ) : r !== null ? (
+        <span
+          className="cyfry shrink-0 text-[13px] font-bold"
+          style={{ color: r >= 0 ? 'var(--zielen)' : 'var(--czerwien)' }}
+        >
+          {r >= 0 ? '+' : ''}
+          {r.toFixed(2).replace('.', ',')}R
+        </span>
+      ) : (
+        <IkonaStrzalkaPrawo rozmiar={16} klasa="shrink-0 text-white/40" />
+      )}
+    </motion.button>
+  )
+}
+
+/**
  * Ostrzeżenie, gdy krótki i długi horyzont wskazują w przeciwne strony.
  *
  * To nie jest błąd — krótkoterminowa korekta w długim trendzie wzrostowym jest
@@ -301,7 +370,7 @@ function RozjazdHoryzontow() {
   const aktywne = uzyjSygnalow((s) => s.aktywne)
 
   const wynikDla = (h: 'krotki' | 'dlugi') => {
-    const sygnal = aktywne.find((s) => s.horyzont === h)
+    const sygnal = aktywnyDlaHoryzontu(aktywne, h)
     if (sygnal) return sygnal.wynik
     const a = analizy[h]
     return a ? a.wynik : null

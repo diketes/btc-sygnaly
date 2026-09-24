@@ -1,0 +1,384 @@
+{
+  "policzono": "2026-09-24",
+  "okno": {
+    "od": "2024-09-24",
+    "do": "2026-09-24"
+  },
+  "zrodlo": "Binance BTCUSDT, rozliczenie na świecach 1h, stop przed celem w obrębie świecy",
+  "horyzonty": [
+    {
+      "dni": 2,
+      "interwalBazowy": "1h",
+      "naZadanie": {
+        "transakcji": 555,
+        "naRok": 278.3,
+        "skutecznosc": 40,
+        "sredniR": 0.21,
+        "sumaR": 117.1,
+        "profitFactor": 1.54,
+        "maksObsuniecie": 10.1,
+        "trafienieTp1": 43.2,
+        "niewypelnione": 878,
+        "przedzialR": [
+          0.1,
+          0.32
+        ]
+      },
+      "zProgami": {
+        "transakcji": 176,
+        "naRok": 88.2,
+        "skutecznosc": 46,
+        "sredniR": 0.37,
+        "sumaR": 65.5,
+        "profitFactor": 2.35,
+        "maksObsuniecie": 6.2,
+        "trafienieTp1": 48.9,
+        "niewypelnione": 465,
+        "przedzialR": [
+          0.19,
+          0.56
+        ]
+      }
+    },
+    {
+      "dni": 3,
+      "interwalBazowy": "1h",
+      "naZadanie": {
+        "transakcji": 387,
+        "naRok": 194.3,
+        "skutecznosc": 39,
+        "sredniR": 0.22,
+        "sumaR": 86.4,
+        "profitFactor": 1.52,
+        "maksObsuniecie": 9.6,
+        "trafienieTp1": 43.4,
+        "niewypelnione": 679,
+        "przedzialR": [
+          0.09,
+          0.36
+        ]
+      },
+      "zProgami": {
+        "transakcji": 166,
+        "naRok": 83.3,
+        "skutecznosc": 44.6,
+        "sredniR": 0.43,
+        "sumaR": 71.6,
+        "profitFactor": 2.51,
+        "maksObsuniecie": 5.9,
+        "trafienieTp1": 50.6,
+        "niewypelnione": 391,
+        "przedzialR": [
+          0.22,
+          0.64
+        ]
+      }
+    },
+    {
+      "dni": 5,
+      "interwalBazowy": "4h",
+      "naZadanie": {
+        "transakcji": 198,
+        "naRok": 99.7,
+        "skutecznosc": 39.9,
+        "sredniR": -0.01,
+        "sumaR": -2.1,
+        "profitFactor": 0.98,
+        "maksObsuniecie": 10.6,
+        "trafienieTp1": 29.3,
+        "niewypelnione": 285,
+        "przedzialR": [
+          -0.17,
+          0.15
+        ]
+      },
+      "zProgami": {
+        "transakcji": 66,
+        "naRok": 33.2,
+        "skutecznosc": 50,
+        "sredniR": 0.1,
+        "sumaR": 6.6,
+        "profitFactor": 1.28,
+        "maksObsuniecie": 5.5,
+        "trafienieTp1": 30.3,
+        "niewypelnione": 202,
+        "przedzialR": [
+          -0.15,
+          0.35
+        ]
+      }
+    },
+    {
+      "dni": 7,
+      "interwalBazowy": "4h",
+      "naZadanie": {
+        "transakcji": 138,
+        "naRok": 69.7,
+        "skutecznosc": 47.1,
+        "sredniR": 0.2,
+        "sumaR": 27.6,
+        "profitFactor": 1.49,
+        "maksObsuniecie": 10.8,
+        "trafienieTp1": 34.8,
+        "niewypelnione": 172,
+        "przedzialR": [
+          -0.02,
+          0.42
+        ]
+      },
+      "zProgami": {
+        "transakcji": 59,
+        "naRok": 29.8,
+        "skutecznosc": 42.4,
+        "sredniR": 0.05,
+        "sumaR": 3,
+        "profitFactor": 1.12,
+        "maksObsuniecie": 7.3,
+        "trafienieTp1": 33.9,
+        "niewypelnione": 151,
+        "przedzialR": [
+          -0.23,
+          0.34
+        ]
+      }
+    },
+    {
+      "dni": 10,
+      "interwalBazowy": "4h",
+      "naZadanie": {
+        "transakcji": 96,
+        "naRok": 48.7,
+        "skutecznosc": 42.7,
+        "sredniR": 0.24,
+        "sumaR": 22.7,
+        "profitFactor": 1.59,
+        "maksObsuniecie": 8.2,
+        "trafienieTp1": 41.7,
+        "niewypelnione": 156,
+        "przedzialR": [
+          -0.04,
+          0.51
+        ]
+      },
+      "zProgami": {
+        "transakcji": 51,
+        "naRok": 25.9,
+        "skutecznosc": 37.3,
+        "sredniR": 0.15,
+        "sumaR": 7.6,
+        "profitFactor": 1.34,
+        "maksObsuniecie": 7.3,
+        "trafienieTp1": 45.1,
+        "niewypelnione": 133,
+        "przedzialR": [
+          -0.22,
+          0.52
+        ]
+      }
+    },
+    {
+      "dni": 14,
+      "interwalBazowy": "1d",
+      "naZadanie": {
+        "transakcji": 47,
+        "naRok": 24,
+        "skutecznosc": 48.9,
+        "sredniR": 0.18,
+        "sumaR": 8.3,
+        "profitFactor": 1.62,
+        "maksObsuniecie": 4.8,
+        "trafienieTp1": 27.7,
+        "niewypelnione": 92,
+        "przedzialR": [
+          -0.1,
+          0.45
+        ]
+      },
+      "zProgami": {
+        "transakcji": 24,
+        "naRok": 12.2,
+        "skutecznosc": 41.7,
+        "sredniR": 0.06,
+        "sumaR": 1.5,
+        "profitFactor": 1.21,
+        "maksObsuniecie": 5.9,
+        "trafienieTp1": 12.5,
+        "niewypelnione": 92,
+        "przedzialR": [
+          -0.36,
+          0.49
+        ]
+      }
+    },
+    {
+      "dni": 21,
+      "interwalBazowy": "1d",
+      "naZadanie": {
+        "transakcji": 36,
+        "naRok": 18.5,
+        "skutecznosc": 41.7,
+        "sredniR": 0.17,
+        "sumaR": 6.3,
+        "profitFactor": 1.5,
+        "maksObsuniecie": 3.7,
+        "trafienieTp1": 30.6,
+        "niewypelnione": 48,
+        "przedzialR": [
+          -0.17,
+          0.52
+        ]
+      },
+      "zProgami": {
+        "transakcji": 20,
+        "naRok": 10.3,
+        "skutecznosc": 45,
+        "sredniR": 0.25,
+        "sumaR": 5,
+        "profitFactor": 1.96,
+        "maksObsuniecie": 3.8,
+        "trafienieTp1": 30,
+        "niewypelnione": 87,
+        "przedzialR": [
+          -0.27,
+          0.78
+        ]
+      }
+    },
+    {
+      "dni": 30,
+      "interwalBazowy": "1d",
+      "naZadanie": {
+        "transakcji": 27,
+        "naRok": 14.1,
+        "skutecznosc": 40.7,
+        "sredniR": 0.11,
+        "sumaR": 3.1,
+        "profitFactor": 1.26,
+        "maksObsuniecie": 7.9,
+        "trafienieTp1": 25.9,
+        "niewypelnione": 44,
+        "przedzialR": [
+          -0.39,
+          0.62
+        ]
+      },
+      "zProgami": {
+        "transakcji": 17,
+        "naRok": 8.9,
+        "skutecznosc": 52.9,
+        "sredniR": 0.17,
+        "sumaR": 2.8,
+        "profitFactor": 1.48,
+        "maksObsuniecie": 5.2,
+        "trafienieTp1": 29.4,
+        "niewypelnione": 51,
+        "przedzialR": [
+          -0.36,
+          0.69
+        ]
+      }
+    },
+    {
+      "dni": 45,
+      "interwalBazowy": "1d",
+      "naZadanie": {
+        "transakcji": 18,
+        "naRok": 9.6,
+        "skutecznosc": 50,
+        "sredniR": -0.07,
+        "sumaR": -1.3,
+        "profitFactor": 0.82,
+        "maksObsuniecie": 8.8,
+        "trafienieTp1": 22.2,
+        "niewypelnione": 71,
+        "przedzialR": [
+          -0.5,
+          0.35
+        ]
+      },
+      "zProgami": {
+        "transakcji": 13,
+        "naRok": 6.9,
+        "skutecznosc": 53.8,
+        "sredniR": -0.02,
+        "sumaR": -0.3,
+        "profitFactor": 0.94,
+        "maksObsuniecie": 5.8,
+        "trafienieTp1": 23.1,
+        "niewypelnione": 62,
+        "przedzialR": [
+          -0.52,
+          0.48
+        ]
+      }
+    },
+    {
+      "dni": 60,
+      "interwalBazowy": "1d",
+      "naZadanie": {
+        "transakcji": 13,
+        "naRok": 7.1,
+        "skutecznosc": 61.5,
+        "sredniR": 0.28,
+        "sumaR": 3.6,
+        "profitFactor": 1.91,
+        "maksObsuniecie": 4,
+        "trafienieTp1": 23.1,
+        "niewypelnione": 30,
+        "przedzialR": [
+          -0.35,
+          0.91
+        ]
+      },
+      "zProgami": {
+        "transakcji": 10,
+        "naRok": 5.4,
+        "skutecznosc": 70,
+        "sredniR": 0.61,
+        "sumaR": 6.1,
+        "profitFactor": 4.04,
+        "maksObsuniecie": 2,
+        "trafienieTp1": 20,
+        "niewypelnione": 47,
+        "przedzialR": [
+          -0.41,
+          1.62
+        ]
+      }
+    },
+    {
+      "dni": 90,
+      "interwalBazowy": "1d",
+      "naZadanie": {
+        "transakcji": 9,
+        "naRok": 5.1,
+        "skutecznosc": 44.4,
+        "sredniR": 0.68,
+        "sumaR": 6.1,
+        "profitFactor": 2.73,
+        "maksObsuniecie": 4,
+        "trafienieTp1": 44.4,
+        "niewypelnione": 22,
+        "przedzialR": [
+          -0.7,
+          2.05
+        ]
+      },
+      "zProgami": {
+        "transakcji": 7,
+        "naRok": 4,
+        "skutecznosc": 42.9,
+        "sredniR": 1.03,
+        "sumaR": 7.2,
+        "profitFactor": 4.16,
+        "maksObsuniecie": 2.1,
+        "trafienieTp1": 42.9,
+        "niewypelnione": 18,
+        "przedzialR": [
+          -0.64,
+          2.7
+        ]
+      }
+    }
+  ]
+}
